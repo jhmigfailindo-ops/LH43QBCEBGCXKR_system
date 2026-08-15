@@ -1,0 +1,39 @@
+# ── 비밀 ── 절대 올리지 않습니다
+.env
+*.key
+*.pem
+
+# ── 파이썬 ──
+.venv/
+__pycache__/
+*.pyc
+
+# ── 돌아가면서 생기는 것 ──
+*.log
+*.pid
+.수집기.pid
+콘텐츠/.버스집중
+콘텐츠/.버스지금
+
+# ── 수집기가 만드는 데이터 ──
+# 소스 브랜치에는 두지 않습니다. 클라우드에서는 Actions 가 따로 채웁니다.
+콘텐츠/데이터.js
+콘텐츠/버스.json
+콘텐츠/img/
+
+# ── 백업·실험 ──
+*.bak
+*.bak2
+*.백업_*
+설정.json.백업_*
+콘텐츠/signage-a.html
+콘텐츠/signage.html.bak*
+
+# 옛 프로토타입 (지금은 signage.html 하나로 통합)
+player.py
+playlist.json
+콘텐츠/news.html
+콘텐츠/weather.html
+콘텐츠/notice.html
+콘텐츠/공지.html
+콘텐츠/위젯_*.html

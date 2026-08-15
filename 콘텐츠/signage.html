@@ -1,0 +1,1314 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>SIGNAGE</title>
+<!--
+  세로 사이니지 통합 화면 — 브루탈리즘
+  ─────────────────────────────────
+  Yodeck 에는 이 파일 하나만 Web Page 로 등록합니다.
+
+  화면 3단계
+    ① 목록      아코디언으로 기사 훑기
+    ② 읽기      요약 + QR (폰으로 이어읽기)
+    ③ 원문      언론사 페이지 그대로 (▲▼ 로 스크롤)
+
+  리모컨
+    ▲ ▼      기사 선택 / 원문에선 스크롤
+    ◀ ▶      언론사 전환 / 읽기·원문에선 이전·다음 기사
+    확인      목록→읽기→원문 순으로 진입
+    뒤로      한 단계 되돌아가기
+    파란버튼   즉시 새로고침 (숫자 0 도 같은 기능)
+
+  ※ 실기기 확인 결과 숫자키 0~9 와 컬러버튼 4개(XF86Red/Green/Yellow/Blue)가
+    모두 웹페이지까지 전달됩니다. 기능을 더 붙일 여지가 있습니다.
+
+  성능
+    · 1080x1920 고정 좌표계 + scale (화면비 재계산 없음)
+    · 외부 폰트 미사용
+    · 이미지는 현재 언론사 것만 로드, 멀어지면 해제
+-->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#111}
+body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+
+#stage{position:absolute;top:0;left:0;width:1080px;height:1920px;background:#FFF;
+  border:36px solid #000;overflow:hidden;transform-origin:top left}
+
+/* ══ ① 목록 ══
+   그룹 높이를 화면보다 45px 짧게 잡아, 아래에 다음 언론사 이름이 살짝 보이게 합니다. */
+/* 트랙은 가만히 있고, 카드가 각자 자기 자리로 움직입니다.
+   통째로 옮기면 화면 밖 카드까지 딸려 움직여 무겁습니다. */
+#track{position:absolute;top:0;left:0;width:100%;height:100%}
+.group{position:absolute;top:0;left:0;
+  width:1008px;height:1803px;display:flex;flex-direction:column;background:#000;overflow:hidden;
+  contain:strict;will-change:transform;backface-visibility:hidden;
+  transition:transform .5s cubic-bezier(.86,0,.12,1)}
+
+.top{height:146px;padding:0 34px;border-bottom:22px solid #000;background:#FFF;display:flex;
+  justify-content:space-between;align-items:center;flex-shrink:0}
+/* 한글·영문 혼용 시 글자가 위로 붙어 보여 시각 중심을 조금 내렸습니다 */
+.press{font-size:84px;font-weight:900;letter-spacing:-4px;line-height:1;transform:translateY(5px)}
+.pmeta{font-size:26px;font-weight:700;letter-spacing:-1px;align-self:flex-end;margin-bottom:24px}
+
+/* ── 아코디언 ──────────────────────────────────────────────
+   구조
+     행 = [ 제목줄 ] + [ 이미지 ]
+     · 제목줄은 접히든 펼쳐지든 항상 같은 자리, 같은 크기입니다.
+       펼쳐질 때 배경만 흰색 → 검정으로 반전됩니다.
+     · 이미지는 제목 아래로 열립니다. 접히면 높이 0.
+
+   원칙
+     ① 제목은 움직이지도 사라지지도 않는다 (중복 제목 없음)
+     ② 커진 행만큼 다른 행이 줄어 총 높이는 항상 같다
+     ③ 모든 변화는 같은 시간·같은 곡선 (딜레이 금지)
+     ④ 위치 이동은 transform(GPU), 행은 절대 배치라 형제 재계산 없음
+   ─────────────────────────────────────────────────────── */
+:root{
+  --dur:.55s;
+  /* 모든 변화가 이 곡선 하나를 씁니다.
+     천천히 출발 → 급가속 → 부드럽게 안착. 착 붙는 감촉이 나옵니다.
+
+     ※ 튕김(오버슛) 곡선은 쓰지 않습니다.
+       펼친 행이 목표(777px)를 넘어 커지면 이미지가 모자라 회색 배경이 흰 선처럼 보이고,
+       아래 행들이 밀렸다 돌아오면서 툭 튀는 느낌이 납니다. */
+  --ease:cubic-bezier(.85,0,.15,1);
+}
+/* 바탕을 검정으로 깝니다.
+   행 사이나 위아래에 1~2px 틈이 생겨도(화면 배율에 따라 발생) 검게 보여 눈에 띄지 않습니다.
+   흰 바탕이면 그 틈이 흰 선으로 보이고, 검은 요소가 지나가면 끊긴 것처럼 보입니다. */
+.stream{flex:1;position:relative;overflow:hidden;contain:layout paint;background:#000}
+.row{position:absolute;left:0;right:0;top:0;
+  display:flex;flex-direction:column;overflow:hidden;background:#000;
+  contain:layout paint;will-change:transform,height;
+  transition:transform var(--dur) var(--ease),height var(--dur) var(--ease)}
+
+/* 제목줄 — 높이 고정. 배경과 글자색만 반전됩니다 */
+.head{height:194px;flex-shrink:0;box-sizing:border-box;border-bottom:13px solid #000;
+  padding:0 34px;display:flex;align-items:center;gap:30px;background:#FFF;overflow:hidden;
+  transition:background-color var(--dur) var(--ease)}
+.row.on .head{background:#000}
+/* 마지막 행 아래 구분선은 빼둡니다 — 바로 아래가 검은 하단바라 선이 겹쳐 보입니다 */
+.row.last .head{border-bottom:none}
+
+.num{font-size:38px;font-weight:700;background:#000;color:#FFF;height:66px;padding:0 28px;
+  border-radius:100px;display:flex;align-items:center;white-space:nowrap;flex-shrink:0;
+  transform-origin:left center;
+  transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease),
+             transform var(--dur) var(--ease)}
+.row.on .num{background:#FFF;color:#000;transform:scale(1.06)}
+
+/* 확장되면 제목을 키웁니다.
+   font-size 대신 transform:scale 을 쓰는 이유 —
+   글자 크기를 바꾸면 매 프레임 줄바꿈을 다시 계산해 무겁고 글자가 튑니다.
+   scale 은 GPU 가 처리하고 레이아웃에 영향을 주지 않습니다.
+
+   다만 scale 은 레이아웃을 무시하므로 그냥 키우면 오른쪽으로 삐져나갑니다.
+   → 글자 상자 자체를 확대율만큼 좁혀둡니다(margin-right). 1.2배 확대 = 16.7% 확보.
+     padding 은 상자 안쪽 여백이라 상자 크기가 그대로여서 같이 커집니다. margin 이어야 합니다.
+     이론값은 16.7%(=1-1/1.2) 지만 실측하니 13% 부터 안 넘쳐 여유를 두고 14% 로 잡았습니다.
+     (10% 로는 31px 넘칩니다)
+   접힌 상태에서 줄바꿈이 이미 정해지므로 확대해도 글자가 튀지 않습니다.
+   높이도 42px 2줄 = 109px → 1.2배 131px 로, 제목줄 194px 안에 들어갑니다. */
+.title{font-size:42px;font-weight:900;letter-spacing:-2px;color:#000;word-break:keep-all;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  flex:1;min-width:0;margin-right:14%;        /* 확대분이 들어갈 자리 (실측 최소 13%, 여유 두어 14%) */
+  transform-origin:left center;
+  transition:color var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.row.on .title{color:#FFF;transform:scale(1.2)}
+
+/* 이미지 — 제목 아래로 열립니다.
+
+   ※ 사진을 위아래로 '이동'시키지 않습니다.
+     행 높이는 메인 스레드가 매 프레임 계산하고, transform 이동은 GPU 가 따로 진행합니다.
+     처리 경로가 달라서 느린 기기에서는 공간만 먼저 열리고 사진이 뒤늦게 따라옵니다.
+
+   ※ 위끝을 고정합니다(top:0).
+     공간은 제목줄 아래로, 위에서 아래를 향해 열립니다.
+     그래서 사진은 제자리에 두고 가려져 있던 아래쪽이 벗겨지는 방식이 됩니다.
+     (아래끝을 붙이면 bottom 이 공간과 함께 내려가 사진이 딸려 내려가고,
+      위치를 매번 다시 계산해야 해서 더 느려집니다.)
+
+   크기 변화(scale)만 남깁니다. 사진 한 장을 레이어째 줄이는 것이라
+   위치 이동과 달리 공간 계산과 부딪히지 않습니다. */
+.media{flex:1;position:relative;overflow:hidden;background:#000;min-height:0}
+/* 움직이는 동안에는 사진을 그리지 않습니다.
+   이 기기는 큰 면적을 다시 그리는 데 약해서, 펼쳐지는 내내 사진을 갱신하면
+   눈에 띄게 끊깁니다. 검은 칸만 열리게 두었다가 다 열린 뒤 사진을 띄웁니다.
+
+   크기 변화(scale)는 살려뒀습니다.
+   칸이 다 열린 다음에 시작되므로 아코디언과 겹치지 않고,
+   부담이 시간차로 나뉘어 오히려 안전합니다. */
+.media img{position:absolute;top:0;left:0;width:100%;height:700px;object-fit:cover;object-position:center 28%;
+  transform-origin:center top;
+  opacity:0;transform:scale(1.08);
+  transition:opacity .2s linear,transform .2s linear}
+.row.on .media img{
+  opacity:1;transform:scale(1);
+  transition:opacity .3s linear var(--dur),
+             transform .52s cubic-bezier(.2,.85,.3,1) var(--dur)}
+.media.none{background:#000}
+
+.noanim .row,.noanim .head,.noanim .num,.noanim .title,.noanim .media img{transition:none !important}
+
+.foot{height:74px;background:#000;color:#FFF;font-size:25px;padding:0 34px;flex-shrink:0;
+  display:flex;justify-content:space-between;align-items:center;letter-spacing:-.5px}
+.foot .r{display:flex;gap:26px}
+
+/* ══ 날씨 ══
+   카드 한 장에 지금 · 지표 · 시간별 · 주간을 모두 넣습니다.
+   본문 높이 1561px = 1803 - 상단 146 - 경계선 22 - 하단 74
+     지금 452 · 지표 168 · 시간별 400 · 주간 541 */
+.wx{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
+
+.wxnow{flex:0 0 452px;background:#000;color:#FFF;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;padding:0 40px}
+.wxnow .loc{font-size:38px;font-weight:900;letter-spacing:-2px}
+.wxnow .tline{display:flex;flex-direction:column;align-items:center;gap:0}
+.wxnow .tmp{font-size:180px;font-weight:900;line-height:.92;letter-spacing:-10px;margin-top:4px}
+.wxnow .sky{font-size:48px;font-weight:900;letter-spacing:-2px}
+.wxnow .mm{font-size:27px;font-weight:700;letter-spacing:-1px;margin-top:12px;
+  border:5px solid #FFF;padding:7px 22px}
+/* 대기질 — 지금 블록 맨 아래 줄 */
+.wxair{display:flex;gap:12px;margin-top:14px}
+.wxair div{display:flex;align-items:center;gap:9px;background:#FFF;color:#000;
+  padding:7px 18px;font-size:25px;font-weight:900;letter-spacing:-1px}
+.wxair b{font-size:21px;font-weight:700;opacity:.55}
+.smp{background:#000;color:#FFF;font-size:18px;font-weight:900;letter-spacing:0;
+  padding:4px 10px;align-self:center}
+.wxair .smp{background:#FFF;color:#000;border:3px solid #000}
+.bstop .smp{background:#FFF;color:#000}
+.wxair i{font-size:21px;font-weight:900;font-style:normal;opacity:.5}
+.wxair .stn{background:none;color:#FFF;opacity:.45;font-size:19px;font-weight:700;padding:7px 4px}
+
+.wxkpi{flex:0 0 168px;display:grid;grid-template-columns:repeat(5,1fr);border-top:13px solid #000}
+.wxkpi>div{border-right:8px solid #000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:9px;padding:0 6px;min-width:0}
+.wxkpi>div:last-child{border-right:none}
+.wxkpi b{font-size:23px;font-weight:700;letter-spacing:-1px;color:#555}
+.wxkpi i{font-size:35px;font-weight:900;letter-spacing:-2px;font-style:normal;white-space:nowrap}
+.wxkpi i small{font-size:21px;font-weight:900}
+.wxkpi .two{font-size:26px;line-height:1.24;text-align:center}
+.wxkpi u{font-size:19px;font-weight:700;text-decoration:none;opacity:.5;letter-spacing:-1px;
+  margin-top:-3px;white-space:nowrap}
+
+.wxhr{flex:0 0 400px;display:flex;flex-direction:column;border-top:13px solid #000;min-height:0}
+/* 지금 어느 시간대를 보고 있는지 탭으로 보여줍니다 */
+.htabs{flex:0 0 66px;display:grid;background:#000}
+.htabs .tb{display:flex;align-items:center;justify-content:center;gap:8px;
+  color:#FFF;opacity:.4;font-size:25px;font-weight:900;letter-spacing:-1px;
+  border-right:6px solid #000;transition:background-color .2s,color .2s,opacity .2s}
+.htabs .tb:last-child{border-right:none}
+.htabs .tb.on{background:#FFF;color:#000;opacity:1}
+.htabs .tb em{font-size:19px;font-weight:700;font-style:normal;opacity:.6}
+.hgrid{flex:1;display:grid;grid-template-columns:repeat(8,1fr);min-height:0}
+/* 쪽을 넘길 때 옆에서 밀려 들어오는 느낌 (위치·투명도만 바꿔 GPU 가 처리합니다) */
+.hgrid.mv{animation:hmv .3s cubic-bezier(.2,.8,.3,1)}
+@keyframes hmv{from{opacity:.2;transform:translateX(42px)}to{opacity:1;transform:none}}
+.hgrid .c{border-right:8px solid #000;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:9px;padding:12px 0;min-width:0;overflow:hidden}
+.hgrid .c:last-child{border-right:none}
+.hgrid .c.nx{background:#EDEDED}          /* 날짜가 넘어간 칸 */
+.hgrid .hh{font-size:24px;font-weight:900;letter-spacing:-1px}
+.hgrid .hs{font-size:21px;font-weight:700;color:#555;letter-spacing:-1px}
+.hgrid .ht{font-size:44px;font-weight:900;letter-spacing:-2px}
+.hgrid .hp{font-size:21px;font-weight:900;background:#000;color:#FFF;padding:2px 9px;letter-spacing:-1px}
+.hgrid .hp.no{background:none;color:#BBB}
+.hgrid .hm{font-size:20px;font-weight:900;letter-spacing:-1px}
+.hgrid .hm.no{color:#CCC;font-weight:700}
+
+/* 주간 — 한 줄에 하루씩 */
+.wk{flex:1;display:flex;flex-direction:column;border-top:13px solid #000;min-height:0}
+.wk .cap{flex:0 0 56px;background:#000;color:#FFF;display:flex;align-items:center;
+  justify-content:space-between;padding:0 34px;font-size:23px;font-weight:700;letter-spacing:2px}
+.wkrow{flex:1;display:flex;align-items:center;gap:18px;padding:0 34px;
+  border-bottom:6px solid #000;min-height:0}
+.wkrow:last-child{border-bottom:none}
+.wkrow.sun{background:#000;color:#FFF}
+.wkrow .wd{flex:0 0 132px;display:flex;align-items:baseline;gap:10px}
+.wkrow .wd b{font-size:38px;font-weight:900;letter-spacing:-2px}
+.wkrow .wd em{font-size:22px;font-weight:700;font-style:normal;opacity:.6}
+.wkrow .half{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;min-width:0}
+.wkrow .half b{font-size:21px;font-weight:700;opacity:.55;letter-spacing:-1px}
+.wkrow .half span{font-size:30px;font-weight:900;letter-spacing:-2px}
+.wkrow .half i{font-size:22px;font-weight:900;font-style:normal;opacity:.75}
+.wkrow .wt{flex:0 0 176px;display:flex;align-items:baseline;justify-content:flex-end;gap:12px}
+.wkrow .wt span{font-size:34px;font-weight:900;letter-spacing:-2px;opacity:.5}
+.wkrow .wt em{font-size:44px;font-weight:900;letter-spacing:-2px;font-style:normal}
+.wkrow .none{flex:1;text-align:right;font-size:24px;font-weight:700;opacity:.4;letter-spacing:-1px}
+
+/* ══ 버스 ══
+   정류장 두 곳 × 노선 열 개 = 스무 줄.
+   본문 1561px 에서 정류장 머리글 두 개(90px)를 빼면 한 줄에 약 69px 이라
+   도착시간과 정거장 수, 다음 차를 한 줄에 나란히 놓았습니다. */
+.bs{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
+.bstop{flex:0 0 90px;background:#000;color:#FFF;display:flex;align-items:center;
+  justify-content:space-between;padding:0 30px;gap:16px;border-top:10px solid #000}
+.bs .bstop:first-child{border-top:none}
+.bstop .nm{font-size:36px;font-weight:900;letter-spacing:-2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;display:flex;align-items:baseline;gap:12px}
+.bstop .nm em{font-size:21px;font-weight:700;font-style:normal;opacity:.6;
+  letter-spacing:-1px;white-space:nowrap}
+.bstop .ars{font-size:23px;font-weight:900;border:4px solid #FFF;padding:4px 12px;flex-shrink:0}
+
+.bsrow{flex:1;display:flex;align-items:center;gap:16px;padding:0 30px;
+  border-bottom:5px solid #000;min-height:0}
+.bsrow:last-child{border-bottom:none}
+.bsrow.pin{background:#000;color:#FFF}
+.bsrow .no{flex:0 0 168px;font-size:38px;font-weight:900;letter-spacing:-2px;
+  white-space:nowrap;overflow:hidden}
+.bsrow .to{flex:1;font-size:21px;font-weight:700;opacity:.55;letter-spacing:-1px;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 곧 오는 차 — 도착시간과 몇 정거장 전인지를 한 줄에 */
+.bsrow .ar{flex:0 0 336px;display:flex;align-items:baseline;justify-content:flex-end;gap:7px}
+.bsrow .ar .w{font-size:34px;font-weight:900;letter-spacing:-2px;white-space:nowrap}
+.bsrow .ar .w.soon{background:#000;color:#FFF;padding:1px 12px}
+.bsrow.pin .ar .w.soon{background:#FFF;color:#000}
+.bsrow .ar .s{font-size:21px;font-weight:900;opacity:.5;letter-spacing:-1px;white-space:nowrap}
+/* 그 다음 차 */
+.bsrow .nx{flex:0 0 190px;text-align:right;font-size:21px;font-weight:700;
+  opacity:.45;letter-spacing:-1px;white-space:nowrap}
+.bs .none{flex:1;display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:700;color:#999}
+/* 리모컨으로 고른 대상 — 왼쪽에 굵은 막대 */
+.bsrow.sel{box-shadow:inset 14px 0 0 #000}
+.bsrow.pin.sel,.bstop.sel{box-shadow:inset 14px 0 0 #FFF}
+.bstop.sel .nm{padding-left:8px}
+.bsrow.sel .no{padding-left:8px}
+
+/* ══ 공지 ══ */
+.nt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:38px;padding:80px;text-align:center;background:#FFF}
+.nt .k{font-size:25px;font-weight:700;letter-spacing:12px;border:8px solid #000;padding:14px 38px}
+.nt h3{font-size:92px;font-weight:900;line-height:1.15;letter-spacing:-4px;word-break:keep-all}
+.nt p{font-size:33px;line-height:1.5;font-weight:700;color:#444}
+.nt .d{font-size:29px;font-weight:700;background:#000;color:#FFF;padding:12px 30px;border-radius:100px}
+
+/* ══ ② 읽기 ══ */
+#read{position:absolute;inset:0;background:#FFF;z-index:20;display:none;flex-direction:column}
+#read.on{display:flex}
+.rtop{background:#000;color:#FFF;padding:28px 34px;flex-shrink:0}
+.rtop .p{font-size:26px;font-weight:700;letter-spacing:3px;opacity:.7}
+.rtop .t{font-size:56px;font-weight:900;line-height:1.22;letter-spacing:-2px;margin-top:12px;word-break:keep-all;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.rmid{flex:1;display:flex;flex-direction:column;min-height:0}
+.rimg{flex:0 0 480px;overflow:hidden;border-bottom:13px solid #000;background:#E8E8E8}
+.rimg img{width:100%;height:100%;object-fit:cover;object-position:center 30%}
+.rimg.none{display:none}
+.rsum{flex:1;padding:34px;font-size:38px;line-height:1.58;font-weight:500;word-break:keep-all;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical}
+.rqr{flex-shrink:0;border-top:13px solid #000;display:flex;align-items:center;gap:30px;padding:26px 34px}
+.rqr .q{width:190px;height:190px;background:#FFF;border:8px solid #000;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center}
+.rqr .q img{width:100%;height:100%;display:block}
+.rqr .txt{flex:1;min-width:0}
+.rqr .txt b{display:block;font-size:34px;font-weight:900;letter-spacing:-1px;margin-bottom:10px}
+.rqr .txt span{display:block;font-size:24px;color:#555;word-break:break-all;line-height:1.4}
+
+/* ══ ③ 원문 ══ */
+#web{position:absolute;inset:0;background:#FFF;z-index:30;display:none;flex-direction:column}
+#web.on{display:flex}
+.wtop{background:#000;color:#FFF;padding:20px 34px;flex-shrink:0;display:flex;
+  justify-content:space-between;align-items:center;font-size:26px}
+.wvp{flex:1;overflow:hidden;position:relative;background:#FFF}
+#wfr{width:100%;height:9000px;border:0;display:block;transition:transform .16s ease-out}
+.bar{height:10px;background:#333;flex-shrink:0}
+.bar i{display:block;height:100%;background:#FFF;width:0;transition:width .16s}
+
+/* 자동전환 멈춤 — 하단 바에 전광판이 흐릅니다.
+   평소에는 아래 것들이 모두 숨어 있어 지금과 똑같습니다. */
+.foot .lbl{letter-spacing:-.5px}
+.foot.hold .lbl{display:none}
+.foot .tick{display:none}
+.foot.hold .tick{display:block;flex:1;height:74px;overflow:hidden;position:relative;margin-right:24px}
+.trk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
+  white-space:nowrap;will-change:transform;
+  animation:flow 18s linear infinite}
+@keyframes flow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.trk .seg{display:flex;align-items:center;gap:96px;padding-right:96px}
+.trk .one{display:flex;align-items:center;gap:13px}
+.trk .rem{opacity:.82;font-size:25px}
+
+/* 리모컨 빨간 버튼 — 글씨와 같은 도트 격자를 덮습니다 */
+.kred{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:#D11212;color:#FFF;font-weight:900;font-size:23px;letter-spacing:0;
+  width:44px;height:34px;border-radius:5px;overflow:hidden}
+.kred::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
+  background-size:4px 4px}
+/* 버스 집중조회 중 — 흰 전광판 (멈춤이 켜지면 그쪽이 우선입니다) */
+.foot .btick{display:none}
+.foot.bus .lbl{display:none}
+.foot.bus .btick{display:block;flex:1;height:74px;overflow:hidden;position:relative;margin-right:24px}
+.foot.hold .btick{display:none}
+.btrk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
+  white-space:nowrap;will-change:transform;animation:flow 20s linear infinite}
+.btrk .seg{display:flex;align-items:center;gap:80px;padding-right:80px}
+.btrk .one{display:flex;align-items:center;gap:12px}
+.kwht{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:#EDEDED;color:#000;font-weight:900;font-size:23px;letter-spacing:0;
+  padding:5px 13px;border-radius:5px;overflow:hidden}
+/* 번짐을 최소로 둡니다. 흰 글씨에 흰 빛을 얹으면 도트가 묻혀 오히려 전광판 느낌이 사라집니다 */
+.ledw{position:relative;font-style:normal;color:#EDEDED;font-weight:900;font-size:27px;letter-spacing:1px;
+  text-shadow:0 0 2px rgba(255,255,255,.35)}
+.ledw.sub{font-size:23px;opacity:.72}
+.kwht::after,.ledw::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
+  background-size:4px 4px}
+
+/* 버스 조각만 앰버 — 실제 버스 도착안내기 색입니다.
+   같은 띠에 속보(흰색)와 번갈아 흐르므로 색으로 구분됩니다. */
+.amber .kwht{background:#FFB000;color:#000}
+.amber .ledw{color:#FFB000;text-shadow:0 0 3px rgba(255,176,0,.45)}
+
+/* 평소 — 속보·최신 기사가 흐릅니다 (버스나 멈춤이 켜지면 그쪽이 우선) */
+.foot .ntick{display:none}
+.foot.news .lbl{display:none}
+.foot.news .ntick{display:block;flex:1;height:74px;overflow:hidden;position:relative;margin-right:24px}
+.foot.hold .ntick,.foot.bus .ntick{display:none}
+.ntrk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
+  white-space:nowrap;will-change:transform;animation:flow 60s linear infinite}
+.ntrk .seg{display:flex;align-items:center;gap:70px;padding-right:70px}
+.ntrk .one{display:flex;align-items:center;gap:13px}
+
+/* 전광판 글씨 — 빨간 발광 위에 도트 격자를 덮습니다 */
+.led{position:relative;font-style:normal;color:#F02323;font-weight:900;font-size:27px;letter-spacing:1px;
+  text-shadow:0 0 3px rgba(255,40,40,.4)}
+.led::after{content:"";position:absolute;inset:-2px;pointer-events:none;
+  background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
+  background-size:4px 4px}
+
+/* 새로고침 안내 */
+#toast{position:absolute;left:50%;top:50%;z-index:60;transform:translate(-50%,-50%) scale(.9);
+  background:#000;color:#FFF;font-size:44px;font-weight:900;letter-spacing:-1px;
+  padding:34px 68px;border:10px solid #FFF;opacity:0;pointer-events:none;
+  transition:opacity .18s ease,transform .18s cubic-bezier(.3,1.4,.5,1)}
+#toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="track"></div>
+
+  <div id="read">
+    <div class="rtop">
+      <div class="p mono" id="rPress">—</div>
+      <div class="t" id="rTitle">—</div>
+    </div>
+    <div class="rmid">
+      <div class="rimg" id="rImg"></div>
+      <div class="rsum" id="rSum">—</div>
+    </div>
+    <div class="rqr">
+      <div class="q" id="rQr"></div>
+      <div class="txt">
+        <b>폰으로 이어보기</b>
+        <span class="mono" id="rUrl">—</span>
+      </div>
+    </div>
+    <div class="foot mono"><span id="rNav">1 / 5</span><span class="r"><span id="rAgo">—</span></span></div>
+  </div>
+
+  <div id="web">
+    <div class="wtop mono"><span id="wPress">—</span><span id="wPct">0%</span></div>
+    <div class="bar"><i id="wBar"></i></div>
+    <div class="wvp"><iframe id="wfr" scrolling="no" referrerpolicy="no-referrer"></iframe></div>
+  </div>
+
+  <div id="toast">새로고침</div>
+</div>
+
+<script src="데이터.js" onerror="void 0"></script>
+<script>
+"use strict";
+
+/* ══ 설정 ══ */
+const AUTO_NEWS = 7000;      // 뉴스는 기사 하나에 7초
+const AUTO_INFO = 18000;     // 날씨·버스·공지는 읽을 것이 많아 18초
+const RELOAD_MS = 600000;
+const STEP = 420;                       // 원문 스크롤 한 칸(px)
+const QR = u => `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=${encodeURIComponent(u)}`;
+
+/* ══ 데이터 ══ */
+const D = window.SIGNAGE_DATA || {};
+const PRESS = (D.press && D.press.length) ? D.press : [{
+  name: "SAMPLE", desc: "",
+  items: [{ title: "수집기.py 를 실행하면 실제 기사가 들어옵니다", ago: "", image: "", summary: "", link: "" }],
+}];
+const WX = D.weather || { location: "수집 전", temp: "—", desc: "", feel: "—", humidity: "—",
+  wind: "—", windDir: "", min: "—", max: "—", sunrise: "--:--", sunset: "--:--", date: "",
+  hours: [], week: [] };
+const UPD_LABEL = (() => {
+  const s = D.updatedAt || "";                       // "2026-08-15 23:17:24"
+  const m = s.match(/^\d{4}-(\d{2})-(\d{2}) (\d{2}:\d{2})/);
+  return m ? `${+m[1]}월 ${+m[2]}일 ${m[3]}` : "수집 전";
+})();
+
+/* 평소 하단바에 흐르는 속보·최신 기사.
+   수집기가 10분마다 채워 주며, 화면이 새로 뜰 때 한 번 만들어 둡니다. */
+const TICKER = D.ticker || [];
+/* esc() 가 아래에서 정의되므로, 값이 아니라 함수로 두고 화면을 만들 때 부릅니다 */
+function newsTickHTML() {
+  if (!TICKER.length) return "";
+  const one = x => `<span class="one">` +
+    (x.hot ? `<b class="kwht">속보</b>`
+           : `<span class="ledw sub">${esc(x.ago)}</span>`) +
+    `<span class="ledw">${esc(x.t)}</span></span>`;
+  const seg = `<span class="seg">${TICKER.map(one).join("")}</span>`;
+  return seg + seg;                                  // 끊기지 않게 두 벌
+}
+
+/* 멈춤일 때 하단바에 흐르는 조각.
+   [A] Pause 와 남은 시간만 되풀이합니다. 시간은 1초마다 제자리에서 바뀝니다. */
+const MARQUEE = `<span class="seg">` +
+  (`<span class="one"><b class="kred">A</b><span class="led">Pause</span>` +
+   `<span class="led rem">--:-- left</span></span>`).repeat(4) +
+  `</span>`;
+
+const GH = 1803;                         // 화면보다 45px 짧게 → 다음 언론사가 살짝 보임
+let BUS = D.bus || [];                   // 버스 도착정보 (없으면 카드를 만들지 않습니다)
+const EXTRA = 2 + (BUS.length ? 1 : 0);  // 뉴스 뒤 카드 수 (날씨 · [버스] · 공지)
+const N = PRESS.length + EXTRA;
+
+/* ══ 상태 ══ */
+let gi = 0, ri = 0, view = 0;   // view 0=목록 1=읽기 2=원문
+let wy = 0, tAuto = 0;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const pad = n => String(n).padStart(2, "0");
+const items = i => (i < PRESS.length ? PRESS[i].items : []);
+
+function fit() {
+  const s = Math.min(innerWidth / 1080, innerHeight / 1920);
+  $("stage").style.transform =
+    `translate(${(innerWidth - 1080 * s) / 2}px,${(innerHeight - 1920 * s) / 2}px) scale(${s})`;
+}
+addEventListener("resize", fit);
+
+/* ══ 목록 만들기 ══
+   뉴스 그룹은 껍데기만 미리 만들고, 내용은 보이는 것 주변만 채웁니다.
+   8개를 다 그려두면 행이 40개가 넘어 약한 CPU 에서 버벅입니다. */
+function build() {
+  const foot = () => `<div class="foot mono"><span class="lbl">+ ADDITIONAL FEEDS</span>
+      <div class="tick"><div class="trk">${MARQUEE}${MARQUEE}</div></div>
+      <div class="btick"><div class="btrk"></div></div>
+      <div class="ntick"><div class="ntrk">${newsTickHTML()}</div></div>
+      <span class="clock">--:--:--</span></div>`;
+
+  const news = PRESS.map((p, i) => `<div class="group" data-g="${i}" data-empty="1"></div>`).join("");
+
+  /* 오늘 — 지금 기온과 시간별 예보 (네이버 날씨 '오늘' 과 같은 구성) */
+  const wxToday = `
+    <div class="group" data-g="${PRESS.length}">
+      <div class="top"><div class="press">WEATHER</div>
+        <div class="pmeta mono">[ ${esc(WX.date || "")} ${WX.obsAt ? "관측 " + esc(WX.obsAt) : ""} ]</div></div>
+      <div class="wx">
+        <div class="wxnow">
+          <div class="loc">${esc(WX.location || "")}</div>
+          <div class="tline"><span class="tmp">${WX.temp ?? "—"}°</span>
+            <span class="sky">${esc(WX.desc || "")}</span></div>
+          <div class="mm mono">최저 ${WX.min ?? "—"}° · 최고 ${WX.max ?? "—"}°</div>
+          ${WX.air ? `<div class="wxair">
+            <div><b>미세</b>${esc(WX.air.pm10g)}<i>${WX.air.pm10}</i></div>
+            <div><b>초미세</b>${esc(WX.air.pm25g)}<i>${WX.air.pm25}</i></div>
+            ${WX.air.st ? `<div class="stn">${esc(WX.air.st)} 측정소</div>` : ""}
+            ${WX.air.sample ? `<div class="smp">샘플</div>` : ""}
+          </div>` : ""}
+        </div>
+        <div class="wxkpi">
+          <div><b>체감</b><i>${WX.feel ?? "—"}°</i></div>
+          <div><b>습도</b><i>${WX.humidity ?? "—"}<small>%</small></i></div>
+          <div><b>바람</b><i>${esc(WX.windDir || "")} ${WX.wind ?? "—"}<small>m/s</small></i></div>
+          <div><b>자외선${WX.uv && WX.uv.sample ? " (샘플)" : ""}</b>
+            <i>${WX.uv ? esc(WX.uv.word) : "—"}${WX.uv ? ` <small>${WX.uv.uv}</small>` : ""}</i>
+            ${WX.uv && WX.uv.max != null && WX.uv.uv === 0
+              ? `<u>낮 최대 ${esc(WX.uv.maxWord)}</u>` : ""}</div>
+          <div><b>일출 · 일몰</b><i class="two mono">${esc(WX.sunrise || "--:--")}<br>${esc(WX.sunset || "--:--")}</i></div>
+        </div>
+        <div class="wxhr">
+          <div class="htabs" id="htabs" style="grid-template-columns:repeat(${HPAGES},1fr)">${tabsHTML()}</div>
+          <div class="hgrid" id="hgrid">${hoursHTML()}</div>
+        </div>
+        <div class="wk">
+          <div class="cap mono"><span>주간예보</span><span>오전 · 오후 · 최저/최고</span></div>
+          ${(WX.week || []).map(d => `
+            <div class="wkrow${d.sun ? " sun" : ""}">
+              <div class="wd"><b>${esc(d.w || "")}</b><em class="mono">${esc(d.d || "")}</em></div>
+              ${d.max == null ? `<div class="none">예보 준비 중</div>` : `
+                <div class="half"><b>오전</b><span>${esc(d.amS || "")}</span><i>${d.amP}%</i></div>
+                <div class="half"><b>오후</b><span>${esc(d.pmS || "")}</span><i>${d.pmP}%</i></div>
+                <div class="wt"><span>${d.min}°</span><em>${d.max}°</em></div>`}
+            </div>`).join("")}
+        </div>
+      </div>${foot()}
+    </div>`;
+
+  /* 버스 — 정류장마다 지정한 노선을 맨 위에 두고, 나머지는 빨리 오는 순서 */
+  const busCard = !BUS.length ? "" : `
+    <div class="group" data-g="${PRESS.length + 1}">
+      <div class="top"><div class="press">BUS</div>
+        <div class="pmeta mono">▲▼ <b id="bustg">—</b> · <span id="bushint">확인 집중조회</span>
+          · 초록 1회갱신 &nbsp;[ <span id="busat">${esc(D.busAt || "")}</span> ]</div></div>
+      <div class="bs" id="bsbody">${busHTML()}</div>${foot()}
+    </div>`;
+
+  const nt = `
+    <div class="group" data-g="${PRESS.length + EXTRA - 1}">
+      <div class="top"><div class="press">NOTICE</div><div class="pmeta mono">[ ${UPD_LABEL} ]</div></div>
+      <div class="nt">
+        <div class="k mono">NOTICE</div>
+        <h3>여기에 공지나<br>이미지가 들어갑니다</h3>
+        <p>팀 공지, 분기 목표, 안내 이미지를<br>이 자리에 넣을 수 있습니다.</p>
+        <div class="d mono" id="today">—</div>
+      </div>${foot()}
+    </div>`;
+
+  $("track").innerHTML = news + wxToday + busCard + nt;
+}
+
+/* ══ 시간별 예보 쪽 넘김 ══
+   한 화면에 8칸씩만 들어가서, 확인 버튼으로 다음 8시간을 봅니다.
+   모아 둔 것이 24칸이라 세 쪽이며, 마지막에서 누르면 처음으로 돌아옵니다. */
+const HPP = 8;                                                   // 한 쪽에 여덟 칸
+const HPAGES = Math.max(1, Math.ceil((WX.hours || []).length / HPP));
+let hp = 0;
+
+function hourSlice() { return (WX.hours || []).slice(hp * HPP, hp * HPP + HPP); }
+
+/* 탭 하나가 시간대 한 묶음입니다. 지금 보고 있는 칸이 흰색으로 뒤집힙니다. */
+function tabsHTML() {
+  const all = WX.hours || [];
+  let out = "";
+  for (let i = 0; i < HPAGES; i++) {
+    const g = all.slice(i * HPP, i * HPP + HPP);
+    if (!g.length) continue;
+    const a = g[0], b = g[g.length - 1];
+    const cross = a.d !== b.d;                       // 날짜를 넘는 묶음
+    out += `<div class="tb${i === hp ? " on" : ""}" data-p="${i}">`
+         + `${a.h}~${b.h}시${cross ? `<em>${esc(b.d)}</em>` : ""}</div>`;
+  }
+  return out;
+}
+
+function hoursHTML() {
+  const g = hourSlice();
+  if (!g.length) return `<div class="c" style="grid-column:1/-1">수집 전</div>`;
+  return g.map(h => `
+    <div class="c${h.next ? " nx" : ""}">
+      <div class="hh mono">${h.h}시</div>
+      <div class="hs">${esc(h.s || "")}</div>
+      <div class="ht">${h.t}°</div>
+      <div class="hp${h.pop ? "" : " no"}">${h.pop ? h.pop + "%" : "—"}</div>
+      <div class="hm${h.mm ? "" : " no"}">${h.mm ? h.mm + "mm" : "·"}</div>
+    </div>`).join("");
+}
+
+function drawHours(move) {
+  const g = $("hgrid");
+  if (g) {
+    g.innerHTML = hoursHTML();
+    if (move) {                                // 옆에서 밀려 들어오게
+      g.classList.remove("mv");
+      void g.offsetWidth;                      // 애니메이션을 다시 태우기 위한 한 줄
+      g.classList.add("mv");
+    }
+  }
+  document.querySelectorAll("#htabs .tb").forEach(t =>
+    t.classList.toggle("on", +t.dataset.p === hp));
+}
+
+function hourNext() {
+  if (HPAGES < 2) return;
+  hp = (hp + 1) % HPAGES;      // 끝까지 가면 다시 처음으로
+  drawHours(true);
+}
+
+function hourReset() { if (hp) { hp = 0; drawHours(); } }
+
+/* 버스 칸 만들기 — 첫 화면과 30초 갱신이 같은 함수를 씁니다 */
+function busHTML() {
+  if (!BUS.length) return `<div class="none">버스 정보를 받는 중입니다</div>`;
+  return BUS.map(st => `
+    <div class="bstop" data-ars="${esc(st.ars)}">
+      <div class="nm">${esc(st.name)}${st.dir ? `<em>${esc(st.dir)}</em>` : ""}</div>
+      ${st.sample ? `<div class="smp">샘플</div>` : ""}
+      <div class="ars mono">${esc(st.ars)}</div>
+    </div>
+    ${(st.lines || []).length ? st.lines.map(l => `
+      <div class="bsrow${(st.pin || []).includes(l.no) ? " pin" : ""}"
+           data-no="${esc(l.no)}" data-ars="${esc(st.ars)}">
+        <div class="no">${esc(l.no)}</div>
+        <div class="to">${l.to ? esc(l.to) + " 방향" : ""}</div>
+        <div class="ar">
+          <span class="w${l.a.soon ? " soon" : ""}">${esc(l.a.when)}</span>
+          ${l.a.where ? `<span class="s">(${esc(l.a.where)})</span>` : ""}
+        </div>
+        <div class="nx">${l.b && l.b.when && l.b.when !== "정보 없음"
+          ? "다음 " + esc(l.b.when) + (l.b.where ? ` (${esc(l.b.where)})` : "") : ""}</div>
+      </div>`).join("") : `<div class="bsrow"><div class="to">도착 예정 버스가 없습니다</div></div>`}`
+  ).join("");
+}
+
+/* ══ 집중 갱신 대상 고르기 ══
+   위·아래 버튼으로 무엇을 자주 볼지 고르고, 확인 버튼으로 시작합니다.
+     · 노선 하나만  → 호출 1건  (가장 아낌)
+     · 정류소 하나  → 호출 1건
+     · 전체        → 정류소 수만큼
+   설정의 '우선노선'에 적은 것이 맨 앞에 옵니다. */
+const BUSGI = PRESS.length + 1;
+let bi = 0;
+
+function boostTargets() {
+  const list = [];
+  BUS.forEach(st => (st.pin || []).forEach(no =>
+    list.push({ k: `route:${no}@${st.ars}`, t: `${no}번만`, ars: st.ars, no })));
+  BUS.forEach(st => list.push({ k: `ars:${st.ars}`, t: st.name, ars: st.ars }));
+  if (BUS.length > 1) list.push({ k: "all", t: "정류소 전체" });
+  return list;
+}
+let BT = [];
+
+function drawBusSel() {
+  const cur = BT[bi];
+  if (!cur) return;
+  const on = boostCur && boostCur.k === cur.k && Date.now() < boostUntil;
+  const lab = $("bustg");
+  if (lab) lab.textContent = cur.t;
+  const hint = $("bushint");
+  if (hint) {
+    const left = on ? Math.ceil((boostUntil - Date.now()) / 60000) : 0;
+    hint.textContent = on ? `확인 정지 (${left}분)` : "확인 집중조회";
+  }
+  document.querySelectorAll("#bsbody .bstop").forEach(el =>
+    el.classList.toggle("sel", cur.k === `ars:${el.dataset.ars}`));
+  document.querySelectorAll("#bsbody .bsrow").forEach(el =>
+    el.classList.toggle("sel",
+      cur.no ? (el.dataset.no === cur.no && el.dataset.ars === cur.ars) : false));
+}
+
+/* ══ 집중조회 중 하단바 전광판 ══
+   버스 카드에서 확인을 누르면, 다른 화면을 보고 있어도 하단바에
+   그 버스가 몇 분 뒤에 오는지 계속 흘러갑니다.
+   내용이 바뀔 때 흐름이 튀지 않도록, 틀은 그대로 두고 글자만 바꿉니다. */
+let boostUntil = 0, boostCur = null;
+
+function busTickRows() {
+  if (!boostCur) return [];
+  const st = BUS.find(x => x.ars === boostCur.ars);
+  if (!st) return [];
+  const pick = boostCur.no
+    ? st.lines.filter(l => l.no === boostCur.no)     // 노선 하나만 고른 경우
+    : st.lines.slice(0, 3);                          // 정류소를 고른 경우 앞 세 개
+  return pick.map(l => ({
+    no: l.no,
+    when: (l.a && l.a.when) || "정보 없음",
+    sub: [(l.a && l.a.where) ? `(${l.a.where})` : "",
+          (l.b && l.b.when && l.b.when !== "정보 없음") ? `다음 ${l.b.when}` : ""]
+         .filter(Boolean).join("  "),
+  }));
+}
+
+/* 틀 만들기 — 줄 수가 바뀔 때만 다시 짭니다.
+   속보(흰색) 한 건과 버스(앰버) 한 건을 번갈아 놓습니다.
+   버스 값은 10초마다 바뀌므로 자리(.w/.s)만 잡아 두고 글자는 나중에 채웁니다. */
+function buildBusTick(rows) {
+  const busOne = r => `<span class="one amber"><b class="kwht">${esc(r.no)}</b>` +
+    `<span class="ledw w"></span><span class="ledw sub s"></span></span>`;
+  const newsOne = x => `<span class="one">` +
+    (x.hot ? `<b class="kwht">속보</b>` : `<span class="ledw sub">${esc(x.ago)}</span>`) +
+    `<span class="ledw">${esc(x.t)}</span></span>`;
+
+  const news = TICKER.slice(0, 4);
+  const parts = [];
+  if (!news.length) {
+    rows.forEach(r => parts.push(busOne(r)));        // 흘릴 기사가 없으면 버스만
+  } else {
+    news.forEach((x, i) => {                         // 기사 하나 → 버스 하나 → 기사 하나 …
+      parts.push(newsOne(x));
+      parts.push(busOne(rows[i % rows.length]));
+    });
+  }
+  const seg = `<span class="seg">${parts.join("")}</span>`;
+  return seg + seg;                                  // 끊기지 않게 두 벌
+}
+
+function drawBusTick() {
+  const on = Date.now() < boostUntil && !paused;
+  document.querySelectorAll(".foot").forEach(f => f.classList.toggle("bus", on));
+  if (!on) return;
+  const rows = busTickRows();
+  if (!rows.length) return;
+  const key = rows.map(r => r.no).join(",") + "|" + TICKER.length;
+  document.querySelectorAll(".group").forEach(g => {
+    if (g.style.visibility === "hidden") return;
+    const trk = g.querySelector(".btrk");
+    if (!trk) return;
+    if (trk.dataset.key !== key) {                   // 노선 구성이 바뀌었을 때만 새로 짜기
+      trk.innerHTML = buildBusTick(rows);
+      trk.dataset.key = key;
+      fitSpeed(trk);
+    }
+    const ws = trk.querySelectorAll(".w"), ss = trk.querySelectorAll(".s");
+    ws.forEach((el, k) => {                          // 자리 순서대로 채웁니다
+      const r = rows[k % rows.length];
+      if (el.textContent !== r.when) el.textContent = r.when;
+      if (ss[k] && ss[k].textContent !== r.sub) ss[k].textContent = r.sub;
+    });
+  });
+}
+
+/* 도착 시간은 금방 바뀝니다. 화면 전체를 새로고침하지 않고 이 칸만 다시 그립니다.
+   여기서 읽는 것은 우리 서버에 있는 파일이라 공공데이터 사용량과는 무관합니다.
+   (버스 API 를 실제로 부르는 쪽은 수집기이며, 설정.json 의 갱신초·운영시간을 따릅니다) */
+async function refreshBus() {
+  if (!BUS.length) return;
+  try {
+    const r = await fetch("버스.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j.stops || !j.stops.length) return;
+    BUS = j.stops;
+    const body = $("bsbody"), at = $("busat");
+    if (body) body.innerHTML = busHTML();
+    if (at) at.textContent = j.at || "";
+    drawBusSel();
+    drawBusTick();
+  } catch (e) {}
+}
+/* 평소에는 1분마다 읽고, 집중조회를 켜면 수집기 주기에 맞춰 10초마다 읽습니다.
+   여기서 읽는 것은 우리 서버의 파일이라 공공데이터 사용량과 무관합니다. */
+let busTimer = setInterval(refreshBus, 60000);
+function setBusRead(ms) { clearInterval(busTimer); busTimer = setInterval(refreshBus, ms); }
+let busCalm = 0;
+
+/* 보이는 언론사(±1)만 내용을 채우고, 멀어지면 비웁니다 */
+/* 화면 밖 카드는 그리기 대상에서 뺍니다.
+
+   트랙 전체 높이가 8장 × 1803px = 14,424px 이고 그 안에 사진 29장이 들어 있습니다.
+   카드를 넘길 때 이 덩어리를 통째로 옮기다 보니, GPU 가 하는 일인데도 버벅였습니다.
+   지금 보이는 것과 그 앞뒤만 남기면 옮길 것이 1/3 로 줄어듭니다.
+   (내용과 사진은 그대로 두므로 다시 불러오지는 않습니다) */
+function setVisible() {
+  document.querySelectorAll(".group").forEach(g => {
+    const i = +g.dataset.g;
+    let d = i - gi;                      // 순환을 고려한 거리
+    if (d >  N / 2) d -= N;
+    if (d < -N / 2) d += N;
+
+    const near = Math.abs(d) <= 1;
+    if (near) {
+      const tf = `translateY(${d * GH}px)`;
+      if (g.style.visibility !== "visible") g.style.visibility = "visible";
+      if (g.style.transform !== tf) g.style.transform = tf;   // 같은 값이면 건드리지 않습니다
+    } else {
+      // 멀리 있는 카드는 애니메이션 없이 화면 밖에 치워둡니다
+      const tf = `translateY(${(d > 0 ? 2 : -2) * GH}px)`;
+      if (g.style.visibility === "hidden" && g.style.transform === tf) return;   // 이미 치워져 있으면 생략
+      g.style.transition = "none";
+      g.style.visibility = "hidden";
+      g.style.transform = tf;
+      requestAnimationFrame(() => requestAnimationFrame(() => { g.style.transition = ""; }));
+    }
+  });
+}
+
+function renderNear() {
+  const foot = () => `<div class="foot mono"><span class="lbl">+ ADDITIONAL FEEDS</span>
+      <div class="tick"><div class="trk">${MARQUEE}${MARQUEE}</div></div>
+      <div class="btick"><div class="btrk"></div></div>
+      <div class="ntick"><div class="ntrk">${newsTickHTML()}</div></div>
+      <span class="clock">--:--:--</span></div>`;
+
+  PRESS.forEach((p, i) => {
+    const g = document.querySelector(`.group[data-g="${i}"]`);
+    if (!g) return;
+    const near = Math.abs(i - gi) <= 1 || (gi === 0 && i === N - 1) || (gi === N - 1 && i === 0);
+
+    if (near && g.dataset.empty === "1") {
+      g.innerHTML = `
+        <div class="top"><div class="press">${esc(p.name)}</div>
+          <div class="pmeta mono">[ ${UPD_LABEL} ]</div></div>
+        <div class="stream">
+          ${p.items.map((n, k) => `
+            <div class="row${k === 0 ? " on sel" : ""}" data-r="${k}">
+              <div class="head">
+                <div class="num mono">( ${pad(k + 1)} )</div>
+                <div class="title">${esc(n.title)}</div>
+              </div>
+              <div class="media${n.image ? "" : " none"}">${
+                n.image ? `<img src="${esc(n.image)}" alt="" onerror="this.parentNode.className='media none'">` : ""}</div>
+            </div>`).join("")}
+        </div>
+        ${foot()}`;
+      g.dataset.empty = "0";
+      // 갓 그려진 행은 애니메이션 없이 제자리에 놓습니다 (첫 진입 때 튀지 않도록)
+      g.classList.add("noanim");
+      layoutRows(g, 0);
+      requestAnimationFrame(() => requestAnimationFrame(() => g.classList.remove("noanim")));
+
+      // 접힌 사진은 화면에 안 보여서 브라우저가 그리기를 미룹니다.
+      // 그러면 펼치는 순간에야 뒤늦게 불러와 버벅입니다.
+      // 미리 디코딩해 두면 펼칠 때 곧바로 나타납니다.
+      g.querySelectorAll(".media img").forEach(im => {
+        if (im.decode) im.decode().catch(() => {});
+      });
+    }
+    /* 한 번 그린 화면은 비우지 않습니다.
+       (예전에는 멀어지면 비웠는데, 돌아올 때 사진을 다시 풀어야 했습니다.
+        이 기기에서 사진 한 장 푸는 데 94ms 나 걸려 그때마다 늦게 나타났습니다.
+        진단 결과 렌더링은 230fps 로 여유가 있어, 그냥 두는 편이 훨씬 낫습니다.) */
+  });
+  setVisible();
+}
+
+/* 행의 높이와 위치를 직접 계산해 넣습니다.
+   레이아웃 엔진이 매 프레임 계산하지 않도록, 값은 우리가 한 번만 정하고
+   이동은 transform 이 GPU 에서 처리합니다.
+
+   높이는 손으로 빼지 않고 실제 영역을 재서 씁니다.
+   (직접 계산하면 border 를 두 번 빼는 식의 실수로 바닥에 빈 줄이 남습니다) */
+const ROW_C = 194;        // 접힌 행 높이
+let streamH = 0;          // 실측한 목록 영역 높이 (한 번만 잽니다)
+
+function layoutRows(g, active) {
+  const stream = g.querySelector(".stream");
+  if (!stream) return;
+  const rows = stream.querySelectorAll(".row");
+  if (!rows.length) return;
+
+  if (!streamH) streamH = stream.clientHeight;
+  const H = streamH || 1583;
+
+  const expand = H - ROW_C * (rows.length - 1);   // 남은 자리를 펼친 행이 전부 가져갑니다
+  let y = 0;
+  rows.forEach((r, k) => {
+    const h = (k === active) ? expand : ROW_C;
+    const hs = h + "px", tf = `translateY(${y}px)`;
+    if (r.style.height !== hs) r.style.height = hs;          // 같은 값이면 건드리지 않습니다
+    if (r.style.transform !== tf) r.style.transform = tf;
+    r.classList.toggle("last", k === rows.length - 1);
+    y += h;
+  });
+}
+
+/* 화면 하나의 행 상태를 정합니다.
+   animate=false 면 애니메이션 없이 즉시 그 모양으로 놓습니다. */
+function setRows(g, active, animate) {
+  if (!g) return;
+  if (!animate) g.classList.add("noanim");
+  g.querySelectorAll(".row").forEach((r, k) => {
+    r.classList.toggle("on", k === active);
+    r.classList.toggle("sel", k === active);
+  });
+  layoutRows(g, active);
+  if (!animate) requestAnimationFrame(() => requestAnimationFrame(() => g.classList.remove("noanim")));
+}
+
+function markRows() { setRows(document.querySelector(`.group[data-g="${gi}"]`), ri, true); }
+
+/* 언론사(화면) 전환 ─────────────────────────────────────
+   움직이는 것은 트랙 하나뿐입니다.
+
+   예전에는 전환과 동시에 새 카드의 아코디언이 열렸고,
+   전에 보던 카드로 돌아갈 때는 5번에서 1번으로 되감는 애니메이션까지 겹쳤습니다.
+   트랙 이동은 GPU 라 가볍지만 아코디언은 레이아웃 계산이라 무겁고,
+   둘이 한꺼번에 돌면 눈에 띄게 느려집니다.
+
+   그래서 다음 카드는 1번이 펼쳐진 모습으로 '미리' 맞춰두고(애니메이션 없이),
+   화면 밖으로 나간 카드도 조용히 1번으로 되돌려 다음을 준비합니다.
+   ──────────────────────────────────────────────────── */
+let resetT = 0, moveT = 0, moving = false;
+
+/* 이미 1번이 펼쳐져 있으면 손대지 않습니다 (괜한 리플로우 방지) */
+const isFirstOpen = el => !!(el && el.querySelector('.row[data-r="0"].on'));
+
+function showGroup(i) {
+  const prev = gi, prevRi = ri;
+  gi = (i + N) % N;
+  ri = 0;
+
+  moving = true;                       // 전환 중에는 시계 등 잔일을 멈춥니다
+  clearTimeout(moveT);
+  moveT = setTimeout(() => { moving = false; tick(true); }, 620);
+
+  // 떠나는 카드: 아코디언이 아직 도는 중일 때만 그 자리에 고정
+  if (prevRi !== 0) setRows(document.querySelector(`.group[data-g="${prev}"]`), prevRi, false);
+
+  renderNear();
+
+  // 다음 카드: 이미 1번 펼침이면 그대로 둡니다
+  const nextEl = document.querySelector(`.group[data-g="${gi}"]`);
+  if (!isFirstOpen(nextEl)) setRows(nextEl, 0, false);
+  // 카드 위치는 setVisible() 안에서 각자 잡습니다
+
+  clearTimeout(resetT);
+  resetT = setTimeout(() => {
+    if (prev === gi) return;
+    const el = document.querySelector(`.group[data-g="${prev}"]`);
+    if (!isFirstOpen(el)) setRows(el, 0, false);   // 이미 1번이면 건드리지 않습니다
+  }, 900);   // 전환이 완전히 끝난 뒤에 조용히 되돌립니다
+}
+
+function showRow(k) { const L = items(gi); if (!L.length) return; ri = (k + L.length) % L.length; markRows(); }
+
+/* ══ ② 읽기 ══ */
+function openRead() {
+  const L = items(gi), n = L[ri];
+  if (!n) return;
+  view = 1; stopAuto();
+  $("rPress").textContent = (n.press || PRESS[gi].name).toUpperCase();
+  $("rTitle").textContent = n.title || "";
+  $("rSum").textContent = n.summary || "요약을 가져오지 못했습니다. 확인을 누르면 원문을 볼 수 있습니다.";
+  $("rNav").textContent = `${ri + 1} / ${L.length}`;
+  $("rAgo").textContent = [n.ago, n.author].filter(Boolean).join("  ·  ") || "";
+
+  const im = $("rImg");
+  im.className = "rimg" + (n.image ? "" : " none");
+  im.innerHTML = n.image ? `<img src="${esc(n.image)}" alt="" onerror="this.parentNode.className='rimg none'">` : "";
+
+  const url = n.link || "";
+  $("rUrl").textContent = url.replace(/^https?:\/\//, "").slice(0, 60);
+  $("rQr").innerHTML = url ? `<img src="${esc(QR(url))}" alt="QR" onerror="this.parentNode.textContent='QR'">` : "";
+  $("read").classList.add("on");
+}
+
+/* ══ ③ 원문 ══ */
+function openWeb() {
+  const n = items(gi)[ri];
+  if (!n || !n.link) return;
+  view = 2; wy = 0; stopAuto();
+  $("wPress").textContent = (n.press || "").toUpperCase() + "  ·  원문";
+  $("wPct").textContent = "0%";
+  $("wBar").style.width = "0%";
+  const fr = $("wfr");
+  fr.style.transform = "translateY(0)";
+  fr.src = n.link;
+  $("web").classList.add("on");
+}
+function scrollWeb(dir) {
+  const max = 9000 - 1600;
+  wy = Math.min(max, Math.max(0, wy + dir * STEP));
+  $("wfr").style.transform = `translateY(${-wy}px)`;
+  const pct = Math.round(wy / max * 100);
+  $("wPct").textContent = pct + "%";
+  $("wBar").style.width = pct + "%";
+}
+function back() {
+  if (view === 2) {                       // 원문 → 읽기
+    view = 1;
+    $("web").classList.remove("on");
+    $("wfr").removeAttribute("src");
+  } else if (view === 1) {                // 읽기 → 목록
+    view = 0;
+    $("read").classList.remove("on");
+    resetAuto();                          // 목록으로 돌아온 시점부터 다시 7초
+  }
+}
+
+/* ══ 자동 넘김 ══ */
+function auto() {
+  if (view) return;
+  const L = items(gi);
+  if (gi < PRESS.length && ri < L.length - 1) showRow(ri + 1);
+  else showGroup(gi + 1);
+}
+/* 머무는 시간이 카드마다 달라서, 일정 간격 반복(setInterval) 대신
+   한 번 넘길 때마다 다음 시간을 새로 잽니다.
+   수동으로 넘겼거나 읽기에서 빠져나온 시점부터 다시 셉니다. */
+/* ══ 자동전환 멈춤 ══
+   멈춘 동안에는 10분마다 하는 새로고침도 미룹니다.
+   (새로고침하면 화면이 처음부터 다시 떠서 멈춤이 풀려버립니다)
+   다만 하염없이 멈춰 있으면 내용이 낡으므로, 지정한 시간이 지나면 스스로 풀립니다. */
+const PAUSE_MAX = 30 * 60 * 1000;
+let paused = false, pauseT = 0, pauseEnd = 0;
+
+function drawPause(on) {
+  document.querySelectorAll(".foot").forEach(f => f.classList.toggle("hold", on));
+  if (on) document.querySelectorAll(".trk").forEach(fitSpeed);
+}
+
+/* 흐를 기사가 있으면 평소 하단바를 전광판으로 둡니다 */
+/* 흐르는 속도 — 초당 몇 픽셀로 갈지 정합니다.
+   시간(초)을 고정하면 글자가 많을수록 빨라져 읽기 어려워집니다.
+   길이에 맞춰 시간을 계산하면 어떤 내용이든 같은 속도로 흐릅니다. */
+const TICK_SPEED = 37;                 // 초당 픽셀
+
+function fitSpeed(el) {
+  if (!el) return;
+  const w = el.scrollWidth / 2;        // 같은 내용을 두 벌 넣어 두었으므로 절반이 한 바퀴
+  if (w > 10) el.style.animationDuration = (w / TICK_SPEED).toFixed(1) + "s";
+}
+
+function drawNewsTick() {
+  if (!TICKER.length) return;
+  document.querySelectorAll(".foot").forEach(f => f.classList.add("news"));
+  document.querySelectorAll(".ntrk").forEach(fitSpeed);
+}
+
+/* 남은 시간을 mm:ss left 로 적습니다 (흐름은 그대로 두고 글자만 바꿉니다) */
+function drawLeft() {
+  if (!paused) return;
+  const ms = Math.max(0, pauseEnd - Date.now());
+  const txt = `${pad(Math.floor(ms / 60000))}:${pad(Math.floor(ms % 60000 / 1000))} left`;
+  document.querySelectorAll(".group").forEach(g => {
+    if (g.style.visibility === "hidden") return;
+    g.querySelectorAll(".trk .rem").forEach(el => {
+      if (el.textContent !== txt) el.textContent = txt;
+    });
+  });
+}
+
+function setPause(on) {
+  paused = on;
+  drawPause(on);
+  clearTimeout(pauseT);
+  try { localStorage.setItem("sgPaused", on ? String(Date.now()) : ""); } catch (e) {}
+  if (on) {
+    stopAuto();
+    pauseEnd = Date.now() + PAUSE_MAX;
+    drawLeft();
+    pauseT = setTimeout(() => setPause(false), PAUSE_MAX);   // 오래 두면 스스로 풀림
+  } else {
+    pauseEnd = 0;
+    resetAuto();
+  }
+}
+
+/* 어떤 이유로든 화면이 다시 떴을 때 멈춤이었으면 그대로 이어갑니다 */
+function restoreBoost() {
+  try {
+    const j = JSON.parse(localStorage.getItem("sgBoost") || "null");
+    if (!j || Date.now() >= j.until) return;
+    const cur = BT.find(x => x.k === j.k);
+    if (!cur || !cur.ars) return;
+    boostCur = cur; boostUntil = j.until;
+    setBusRead(cur.no ? 10000 : 30000);
+    clearTimeout(busCalm);
+    busCalm = setTimeout(() => setBusRead(60000), j.until - Date.now());
+    drawBusTick();
+  } catch (e) {}
+}
+
+function restorePause() {
+  try {
+    const at = +(localStorage.getItem("sgPaused") || 0);
+    if (at && Date.now() - at < PAUSE_MAX) {
+      paused = true;
+      drawPause(true);
+      stopAuto();
+      pauseEnd = at + PAUSE_MAX;
+      drawLeft();
+      pauseT = setTimeout(() => setPause(false), pauseEnd - Date.now());
+    }
+  } catch (e) {}
+}
+
+function autoMs() { return gi < PRESS.length ? AUTO_NEWS : AUTO_INFO; }
+function resetAuto() {
+  clearTimeout(tAuto);
+  if (paused) return;                       // 멈춤 중에는 타이머를 걸지 않습니다
+  tAuto = setTimeout(() => { auto(); resetAuto(); }, autoMs());
+}
+function stopAuto() { clearTimeout(tAuto); tAuto = 0; }   // 읽기·원문 보는 동안은 멈춤
+
+/* 화면 가운데에 잠깐 뜨는 안내 */
+let toastT = 0;
+function toast(msg, ms) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastT);
+  if (ms) toastT = setTimeout(() => t.classList.remove("on"), ms);
+}
+
+/* 즉시 새로고침 — 파란 버튼 / 숫자 0 */
+function reloadNow() {
+  toast("새로고침");
+  setTimeout(() => location.reload(), 450);
+}
+
+/* 버스 도착정보 집중 갱신 — 버스 카드에서 확인 버튼
+   평소에는 5분마다 받아오지만, 버스를 타러 나갈 때는 그 간격이 깁니다.
+   이 버튼을 누르면 수집기가 한동안 30초마다 받아옵니다.
+   (하루 호출 수에 제한이 있어 늘 짧게 둘 수는 없습니다) */
+/* 지금 한 번만 정류소 전체를 새로 받아옵니다 (집중조회와 달리 계속 부르지 않습니다).
+   수집기가 받아 파일에 쓰면 화면이 그 파일을 읽어 갈아 끼우므로, 몇 초 뒤에 반영됩니다. */
+async function busOnce() {
+  toast("정류소 전체 1회 갱신", 2000);
+  try {
+    await fetch(`/bus-boost?target=once&t=${Date.now()}`, { cache: "no-store" });
+    [2500, 5000, 8000, 12000].forEach(t => setTimeout(refreshBus, t));   // 올 때까지 몇 번 확인
+  } catch (e) {
+    toast("갱신 요청 실패", 2000);
+  }
+}
+
+/* 집중조회 그만두기 — 평소 주기(5분)로 돌아갑니다 */
+async function busStop(quiet) {
+  boostUntil = 0; boostCur = null;
+  try { localStorage.removeItem("sgBoost"); } catch (e) {}
+  clearTimeout(busCalm);
+  setBusRead(60000);
+  drawBusTick();
+  drawBusSel();
+  if (!quiet) toast("집중조회 정지", 1800);
+  try { await fetch(`/bus-boost?target=off&t=${Date.now()}`, { cache: "no-store" }); } catch (e) {}
+}
+
+async function busBoost() {
+  const cur = BT[bi] || { k: "all", t: "정류소 전체" };
+
+  // 이미 그 대상을 보고 있으면, 한 번 더 누른 것은 "그만" 이라는 뜻입니다.
+  if (boostCur && boostCur.k === cur.k && Date.now() < boostUntil) {
+    return busStop();
+  }
+
+  toast(`${cur.t} 자주 받는 중`, 2200);
+  if (cur.ars) {                                   // 전체 조회는 하단바에 띄우지 않습니다
+    boostCur = cur;
+    boostUntil = Date.now() + 30 * 60 * 1000;
+    try { localStorage.setItem("sgBoost", JSON.stringify({ k: cur.k, until: boostUntil })); } catch (e) {}
+    drawBusTick();
+  }
+  try {
+    await fetch(`/bus-boost?target=${encodeURIComponent(cur.k)}&t=${Date.now()}`,
+                { cache: "no-store" });
+    setBusRead(cur.no ? 10000 : 30000);          // 수집기가 부르는 만큼만 읽습니다
+    clearTimeout(busCalm);
+    busCalm = setTimeout(() => busStop(true), 30 * 60 * 1000);   // 30분 뒤 스스로 그만
+    setTimeout(refreshBus, 1500);      // 수집기가 새로 받아올 시간을 조금 줍니다
+  } catch (e) {
+    toast("갱신 요청 실패", 2200);
+  }
+}
+
+/* ══ 리모컨 ══
+   우리가 쓰는 키에만 손대고 나머지(음량·홈·메뉴 등)는 건드리지 않습니다.
+
+   ※ 다만 이 페이지가 포커스를 쥐고 있으면 시스템 키도 웹으로 먼저 전달되어
+     기기 기능이 동작하지 않을 수 있습니다. preventDefault 와 무관한 문제로,
+     리모컨 조작(방향키 수신)과 맞바꿔지는 성질입니다.
+     그래서 가로채기(capture) 대신 일반 단계에서 듣고,
+     다른 처리기가 먼저 손댄 이벤트는 아예 건드리지 않습니다. */
+addEventListener("keydown", e => {
+  lastKeyAt = Date.now();                 // 키가 온다 = 포커스가 살아있음
+  if (e.defaultPrevented) return;         // 이미 누가 처리한 키는 그대로 둡니다
+  const c = e.keyCode || e.which, K = e.key || "", L = items(gi);
+  let used = true;
+
+  // 어느 화면에서든 새로고침 — 파란 버튼 또는 숫자 0
+  // 기기에 따라 key 이름(XF86Blue) 으로 오기도 하고 keyCode(406) 로 오기도 해서 둘 다 받습니다.
+  if (K === "XF86Red" || c === 403) { setPause(!paused); e.preventDefault(); return; }
+  if ((K === "XF86Green" || c === 404) && BUS.length && gi === BUSGI) {
+    busOnce(); resetAuto(); e.preventDefault(); return;
+  }
+  if (K === "XF86Blue" || c === 406 || c === 48 || c === 96) {
+    reloadNow(); e.preventDefault(); return;
+  }
+
+  if (view === 2) {                                  // 원문
+    if (c === 38) scrollWeb(-1);
+    else if (c === 40) scrollWeb(1);
+    else if (c === 10009 || c === 27 || c === 8 || c === 461) back();
+    else used = false;
+  } else if (view === 1) {                            // 읽기
+    if (c === 13) openWeb();
+    else if (c === 39) { ri = (ri + 1) % L.length; openRead(); }
+    else if (c === 37) { ri = (ri - 1 + L.length) % L.length; openRead(); }
+    else if (c === 10009 || c === 27 || c === 8 || c === 461) back();
+    else used = false;
+  } else {                                            // 목록
+    // 마지막 기사에서 ▼ 는 다음 언론사, 첫 기사에서 ▲ 는 이전 언론사로 넘어갑니다
+    if (BUS.length && gi === BUSGI && (c === 38 || c === 40)) {
+      bi = (bi + (c === 40 ? 1 : -1) + BT.length) % BT.length;   // 위·아래로 대상 바꾸기
+      drawBusSel(); resetAuto();
+    }
+    else if (c === 40) { (ri >= L.length - 1) ? showGroup(gi + 1) : showRow(ri + 1); resetAuto(); }
+    else if (c === 38) { (ri <= 0) ? showGroup(gi - 1) : showRow(ri - 1); resetAuto(); }
+    else if (c === 39) { showGroup(gi + 1); resetAuto(); }
+    else if (c === 37) { showGroup(gi - 1); resetAuto(); }
+    else if (c === 13 && L.length) openRead();
+    else if (c === 13 && gi === PRESS.length) { hourNext(); resetAuto(); }
+    else if (c === 13 && BUS.length && gi === BUSGI) { busBoost(); resetAuto(); }
+    else used = false;
+  }
+  if (used) e.preventDefault();   // 우리가 쓴 키만 기본동작 차단, 나머지는 기기로 통과
+}, false);
+
+/* ══ 시계 · 새로고침 ══ */
+/* 시계는 '보이는 카드'만 갱신하고, 카드가 넘어가는 동안에는 쉽니다.
+   숨은 카드까지 매초 건드리면 전환 중 프레임을 잡아먹습니다. */
+function tick(force) {
+  // 전환 중에는 쉬지만, 갓 그린 카드를 채울 때는 강제로 한 번 돌립니다
+  // (그러지 않으면 새 카드 시계가 --:--:-- 인 채로 잠깐 보입니다)
+  if (moving && !force) return;
+  const d = new Date();
+  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  drawLeft();
+  drawBusTick();
+  if (gi === BUSGI) drawBusSel();
+  document.querySelectorAll(".group").forEach(g => {
+    if (g.style.visibility === "hidden") return;
+    const el = g.querySelector(".clock");
+    if (el && el.textContent !== t) el.textContent = t;
+  });
+  const td = $("today");
+  if (td) td.textContent = `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
+}
+function scheduleReload() {
+  setTimeout(function again() {
+    if (view || paused) return setTimeout(again, 30000);   // 읽는 중이거나 멈춰 두었으면 미룸
+    location.reload();
+  }, RELOAD_MS);
+}
+/* 포커스 확보 — 아주 조심스럽게만 합니다.
+
+   이 페이지가 리모컨 키를 받으려면 포커스가 있어야 하는데,
+   주기적으로 포커스를 뺏어오면 기기 메뉴 같은 시스템 화면이
+   열자마자 닫히거나 먹통이 됩니다.
+
+   그래서 최근에 키가 들어왔다면(=포커스가 살아있다면) 아무것도 하지 않고,
+   오랫동안 아무 키도 안 들어온 경우에만 다시 잡습니다. */
+let lastKeyAt = 0;                 // 0 = 아직 키가 한 번도 안 들어옴 → 반드시 포커스를 잡아야 함
+function grab() {
+  // 키가 들어온 적이 있고 최근이라면 포커스가 살아있으므로 건드리지 않습니다
+  if (lastKeyAt && Date.now() - lastKeyAt < 10 * 60 * 1000) return;
+  try { window.focus(); document.body.focus(); } catch (e) {}
+}
+
+/* 사진 미리 받아두기 ─────────────────────────────────────
+   화면을 아끼려고 멀어진 언론사는 내용을 비웠다가 가까워지면 다시 만듭니다.
+   그때 <img> 가 새로 생기는데, 미리 받아둔 게 없으면 그 순간 다시 불러오고
+   다시 그리느라 사진만 늦게 나타납니다.
+
+   시작할 때 모든 사진을 한 번씩 받아 디코딩까지 끝내고, 참조를 남겨둡니다.
+   그러면 나중에 <img> 를 새로 만들어도 이미 준비된 그림을 곧바로 씁니다.
+   (성능 측정 결과 이 기기의 렌더링은 250fps 이상으로 충분했고,
+    실제 지연은 이 '다시 불러오기' 때문이었습니다) */
+const imgCache = [];
+function preloadImages() {
+  PRESS.forEach(p => p.items.forEach(n => {
+    if (!n.image) return;
+    const im = new Image();
+    im.src = n.image;
+    if (im.decode) im.decode().catch(() => {});
+    imgCache.push(im);                 // 참조를 붙들고 있어야 캐시에서 밀려나지 않습니다
+  }));
+}
+
+/* ══ 시작 ══ */
+document.body.setAttribute("tabindex", "0");
+preloadImages();
+build(); fit(); BT = boostTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
+setInterval(tick, 1000);
+// 처음엔 확실히 잡습니다 (이게 안 되면 리모컨이 아예 안 먹습니다).
+// 키가 한 번 들어온 뒤로는 위 조건에 걸려 저절로 조용해집니다.
+[0, 400, 1200, 3000, 8000].forEach(t => setTimeout(grab, t));
+setInterval(grab, 5 * 60 * 1000);
+resetAuto(); scheduleReload(); grab();
+</script>
+</body>
+</html>
