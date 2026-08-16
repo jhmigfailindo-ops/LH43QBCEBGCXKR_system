@@ -110,7 +110,7 @@ def get(url: str, timeout: int = 12):
         "Connection": "close",
     }
     last = None
-    for wait in (timeout, timeout * 2):
+    for wait in (timeout, timeout * 2, timeout * 3):
         try:
             return urllib.request.urlopen(
                 urllib.request.Request(url, headers=head), timeout=wait)
@@ -468,7 +468,7 @@ def kma(base: str, path: str, params: dict, key: str):
     qs = urllib.parse.urlencode(
         {**params, "dataType": "JSON", "numOfRows": 1000, "pageNo": 1, "serviceKey": key}, safe="%")
     try:
-        data = json.loads(get(f"{base}/{path}?{qs}", timeout=30).read().decode("utf-8"))
+        data = json.loads(get(f"{base}/{path}?{qs}", timeout=60).read().decode("utf-8"))
         head = data["response"]["header"]
         if head["resultCode"] != "00":
             log("⏭", f"{path}: {head['resultMsg']}")
