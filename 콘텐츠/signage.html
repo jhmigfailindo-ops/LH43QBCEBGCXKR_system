@@ -1230,8 +1230,8 @@ function reloadNow() {
    (하루 호출 수에 제한이 있어 늘 짧게 둘 수는 없습니다) */
 /* 지금 한 번만 정류소 전체를 새로 받아옵니다 (집중조회와 달리 계속 부르지 않습니다).
    수집기가 받아 파일에 쓰면 화면이 그 파일을 읽어 갈아 끼우므로, 몇 초 뒤에 반영됩니다. */
-function busOnce() {
-  toast("정류소 전체 1회 갱신", 2000);
+function busOnce(here) {
+  toast(here ? "정류소 전체 1회 갱신" : "버스 화면 · 1회 갱신", 2000);
   pullBus();
 }
 
@@ -1289,8 +1289,13 @@ addEventListener("keydown", e => {
   // 어느 화면에서든 새로고침 — 파란 버튼 또는 숫자 0
   // 기기에 따라 key 이름(XF86Blue) 으로 오기도 하고 keyCode(406) 로 오기도 해서 둘 다 받습니다.
   if (K === "XF86Red" || c === 403) { setPause(!paused); e.preventDefault(); return; }
-  if ((K === "XF86Green" || c === 404) && BUS.length && gi === BUSGI) {
-    busOnce(); resetAuto(); e.preventDefault(); return;
+  // 초록 — 어느 화면에서 눌러도 버스를 지금 한 번 받아옵니다.
+  // 다른 화면이었다면 버스 카드로 함께 넘어갑니다.
+  if ((K === "XF86Green" || c === 404) && BUS.length) {
+    const here = (gi === BUSGI);
+    if (!here) showGroup(BUSGI);
+    busOnce(here);
+    resetAuto(); e.preventDefault(); return;
   }
   if (K === "XF86Blue" || c === 406 || c === 48 || c === 96) {
     reloadNow(); e.preventDefault(); return;
