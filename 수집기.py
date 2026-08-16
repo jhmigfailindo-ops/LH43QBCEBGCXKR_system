@@ -96,8 +96,31 @@ def load_conf() -> dict:
 
 
 def get(url: str, timeout: int = 12):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    return urllib.request.urlopen(req, timeout=timeout)
+    """
+    페이지를 받아옵니다.
+    클라우드(GitHub Actions)는 서버가 해외에 있어 국내 언론사 응답이 느리거나
+    막히는 일이 있습니다. 그래서 브라우저처럼 보이는 머리말을 붙이고,
+    시간이 걸리면 조금 더 기다렸다가 한 번 더 시도합니다.
+    """
+    head = {
+        "User-Agent": UA,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+        "Referer": "https://www.google.com/",
+        "Connection": "close",
+    }
+    last = None
+    for wait in (timeout, timeout * 2):
+        try:
+            return urllib.request.urlopen(
+                urllib.request.Request(url, headers=head), timeout=wait)
+        except Exception as e:
+            last = e
+            code = getattr(e, "code", None)
+            if code in (401, 403, 404):        # 막힌 것은 다시 물어도 같습니다
+                break
+            time.sleep(1)
+    raise last
 
 
 def clean_text(s: str) -> str:
@@ -155,7 +178,7 @@ def ago_text(m: int) -> str:
 def parse_feed(url: str) -> list:
     """RSS 하나에서 기사 목록을 뽑습니다."""
     try:
-        root = ET.fromstring(get(url).read())
+        root = ET.fromstring(get(url, timeout=20).read())
     except Exception as e:
         log("⚠️", f"피드 실패: {url.split('/')[2]} — {str(e)[:40]}")
         return []
