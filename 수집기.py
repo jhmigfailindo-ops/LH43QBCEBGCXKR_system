@@ -54,6 +54,11 @@ SKY = {"1": ("맑음", "☀️"), "3": ("구름많음", "⛅"), "4": ("흐림", 
 PTY = {"1": ("비", "🌧"), "2": ("비/눈", "🌨"), "3": ("눈", "❄️"), "4": ("소나기", "🌦")}
 
 _frame_cache: dict = {}  # 도메인별 원문 표시 가능 여부
+_seen_items: list = []   # 이번에 훑은 기사 전부 (하단바 속보를 고를 때 다시 씁니다)
+
+# 하단바는 자리가 좁아 언론사 이름을 줄여 씁니다
+SHORT_PRESS = {"연합뉴스": "연합", "조선일보": "조선", "동아일보": "동아",
+               "경향신문": "경향", "매일경제": "매경", "한국경제": "한경"}
 
 
 def log(icon, msg):
@@ -329,6 +334,11 @@ def collect_press(press: dict, drop_words: list, want_image: bool, max_min: int 
         log("❌", f"{name} — 기사를 가져오지 못했습니다")
         return None
 
+    # 하단바가 속보를 고를 때 쓰도록, 추린 것 말고 받아온 전부를 남겨 둡니다.
+    for r in lists:
+        for n in r:
+            _seen_items.append({"title": n["title"], "min": n["min"], "press": name})
+
     mode = press.get("정렬", "자동")
     if mode == "자동":
         # 피드가 하나면 그 순서가 곧 언론사의 편집 순서입니다.
@@ -383,6 +393,7 @@ def collect_press(press: dict, drop_words: list, want_image: bool, max_min: int 
 
 
 def collect_news(cfg: dict) -> list:
+    _seen_items.clear()
     c = cfg.get("뉴스", {})
     plist = c.get("언론사", [])
     drop = c.get("제외키워드", [])
@@ -1140,13 +1151,20 @@ def sample_bus(cfg: dict):
 # 속보 전용 RSS 는 사실상 없어서, 제목에 붙는 [속보]·[1보] 표시로 골라냅니다.
 # 속보가 하나도 없는 시간대가 더 많으므로, 그때 무엇을 흘릴지는 설정에서 정합니다.
 def collect_ticker(cfg: dict):
+    """
+    하단바에 흘릴 속보를 고릅니다.
+    카드로 도는 언론사 전부에서 찾습니다 — 속보는 어디서 나왔든 알아야 하니까요.
+    이미 카드용으로 받아 둔 기사를 다시 쓰므로 API 를 더 부르지 않습니다.
+    (설정의 하단바.피드 에 주소를 적으면 그것만 따로 봅니다)
+    """
     conf = cfg.get("하단바", {}) or {}
     feeds = conf.get("피드", [])
-    if not feeds:
-        return []
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        items = [x for r in ex.map(parse_feed, feeds) for x in r]
+    if feeds:
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            items = [x for r in ex.map(parse_feed, feeds) for x in r]
+    else:
+        items = list(_seen_items)
     if not items:
         return []
 
@@ -1170,7 +1188,9 @@ def collect_ticker(cfg: dict):
         if key in seen:
             continue
         seen.add(key)
-        row = {"t": strip_mark(n["title"]), "ago": ago_text(n["min"])}
+        who = n.get("press", "")
+        row = {"t": strip_mark(n["title"]), "ago": ago_text(n["min"]),
+               "p": SHORT_PRESS.get(who, who)}
         if any(m in n["title"] for m in marks):
             if n["min"] <= hot_fresh:
                 hot.append({**row, "hot": True})
@@ -1181,7 +1201,8 @@ def collect_ticker(cfg: dict):
     if not out and conf.get("속보없을때", "최신") == "최신":
         out = new[:limit]
     kind = "속보" if hot else ("최신" if out else "없음")
-    log("📢", f"하단바 {len(out)}건 · {kind}" +
+    who = " · ".join(sorted({x["p"] for x in out if x.get("p")}))
+    log("📢", f"하단바 {len(out)}건 · {kind}" + (f" ({who})" if who else "") +
               (f" (속보는 {hot_fresh}분 안에 없었습니다)" if not hot and out else ""))
     return out
 

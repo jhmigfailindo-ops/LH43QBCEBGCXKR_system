@@ -455,6 +455,7 @@ function newsTickHTML() {
   const one = x => `<span class="one">` +
     (x.hot ? `<b class="kwht">속보</b>`
            : `<span class="ledw sub">${esc(x.ago)}</span>`) +
+    (x.p ? `<span class="ledw sub">${esc(x.p)}</span>` : "") +
     `<span class="ledw">${esc(x.t)}</span></span>`;
   const seg = `<span class="seg">${TICKER.map(one).join("")}</span>`;
   return seg + seg;                                  // 끊기지 않게 두 벌
@@ -719,6 +720,7 @@ function buildBusTick(rows) {
     `<span class="ledw w"></span><span class="ledw sub s"></span></span>`;
   const newsOne = x => `<span class="one">` +
     (x.hot ? `<b class="kwht">속보</b>` : `<span class="ledw sub">${esc(x.ago)}</span>`) +
+    (x.p ? `<span class="ledw sub">${esc(x.p)}</span>` : "") +
     `<span class="ledw">${esc(x.t)}</span></span>`;
 
   const news = TICKER.slice(0, 4);
