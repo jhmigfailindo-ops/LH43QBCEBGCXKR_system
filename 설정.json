@@ -58,10 +58,14 @@
         "정렬": "자동"
       },
       {
-        "이름": "JTBC",
-        "설명": "이슈 Top10 (큐레이션)",
+        "이름": "뉴시스",
+        "설명": "국가기간 통신사",
+        "_주석": "JTBC 를 대신합니다. JTBC 는 해외(GitHub Actions)에서 접속이 막혀 클라우드에서 받지 못했습니다. 뉴시스는 통신사라 [속보] 를 자주 달아 하단바 속보에도 도움이 됩니다.",
         "피드": [
-          "https://news-ex.jtbc.co.kr/v1/get/rss/issue"
+          "https://newsis.com/RSS/politics.xml",
+          "https://newsis.com/RSS/economy.xml",
+          "https://newsis.com/RSS/society.xml",
+          "https://newsis.com/RSS/international.xml"
         ],
         "건수": 5,
         "정렬": "자동"
