@@ -41,8 +41,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/bus-boost":
             # 무엇을 집중해서 볼지 화면이 함께 알려줍니다.
             #   all            정류소 전체를 다시 조회
-            #   ars:14112      그 정류소 하나만
-            #   route:9711@14112   그 정류소의 그 노선 하나만 (호출이 가장 적음)
+            #   ars:<ARS번호>   그 정류소 하나만
+            #   route:<노선>@<ARS>  그 정류소의 그 노선 하나만
             #   off            집중조회 그만두기
             #   once           지금 한 번만 정류소 전체 갱신
             q = urllib.parse.parse_qs(urlparse(self.path).query)

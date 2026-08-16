@@ -11,7 +11,7 @@
  *
  * 창구
  *   GET /weather                지금 기온·시간별·주간·대기질·자외선
- *   GET /bus?ars=14112,14335    정류소별 버스 도착정보
+ *   GET /bus[?ars=…]            정류소별 버스 도착정보 (기본값은 Secret)
  *   GET /health                 살아 있는지 확인
  */
 
@@ -120,7 +120,7 @@ function uvWord(v) {
 /* ───────────────────────── 날씨 ───────────────────────── */
 async function getWeather(env) {
   const key = env.DATA_GO_KR_KEY;
-  const nx = env.GRID_X || "58", ny = env.GRID_Y || "127";
+  const nx = env.GRID_X || "60", ny = env.GRID_Y || "127";
   const now = kst();
   const today = ymd(now);
 
@@ -262,7 +262,7 @@ async function getWeather(env) {
   for (let i = 0; i < 3 && !air; i++) {
     try {
       const q = new URLSearchParams({
-        stationName: env.AIR_STATION || "마포구", dataTerm: "DAILY",
+        stationName: env.AIR_STATION || "중구", dataTerm: "DAILY",
         returnType: "json", numOfRows: "1", pageNo: "1", ver: "1.0",
       });
       const r = await fetch(`${AIR_URL}?${q}&serviceKey=${key}`, { signal: AbortSignal.timeout(20000) });
@@ -270,7 +270,7 @@ async function getWeather(env) {
       if (it && it.pm10Value && it.pm10Value !== "-") {
         air = { pm10: +it.pm10Value, pm10g: GRADE[it.pm10Grade] || "—",
                 pm25: +it.pm25Value, pm25g: GRADE[it.pm25Grade] || "—",
-                st: env.AIR_STATION || "마포구", at: (it.dataTime || "").slice(-5), sample: false };
+                st: env.AIR_STATION || "중구", at: (it.dataTime || "").slice(-5), sample: false };
       }
     } catch { /* 잠시 뒤 다시 */ }
   }
@@ -279,7 +279,7 @@ async function getWeather(env) {
     for (const b of [now, kst(-180), kst(-360)]) {
       const t = ymd(b) + p2(Math.floor(b.getUTCHours() / 3) * 3);
       try {
-        const it = (await callJson(UV_URL, { areaNo: env.UV_AREA || "1144000000", time: t }, key, 12000))[0];
+        const it = (await callJson(UV_URL, { areaNo: env.UV_AREA || "1100000000", time: t }, key, 12000))[0];
         const v = +(it.h0 || 0);
         const rest = ["h3", "h6", "h9", "h12", "h15", "h18"].map((k) => +it[k]).filter((x) => !isNaN(x));
         const top = rest.length ? Math.max(...rest) : v;
@@ -289,9 +289,9 @@ async function getWeather(env) {
     }
   } catch { /* 자외선도 없어도 그만 */ }
 
-  const [rise, set] = sunTimes(+(env.LAT || 37.5794), +(env.LON || 126.8895));
+  const [rise, set] = sunTimes(+(env.LAT || 37.5665), +(env.LON || 126.9780));
   return {
-    location: env.LOCATION || "서울 마포구 상암동",
+    location: env.LOCATION || "서울",
     temp: Math.round(temp * 10) / 10, desc, icon,
     feel: feelsLike(temp, hum, wind), humidity: hum,
     wind: Math.round(wind * 10) / 10, windDir: VEC16[Math.floor(((vec + 11.25) % 360) / 22.5)],
@@ -376,6 +376,24 @@ const CORS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
+/* 화면이 아닌 곳에서 함부로 부르지 못하게 막습니다.
+   응답에 정류소·좌표가 들어 있어, 주소만 알면 근무지가 드러나기 때문입니다.
+   두 가지 중 하나만 맞으면 통과시킵니다.
+     · 우리 화면(ALLOW_ORIGIN 에 적어 둔 곳)에서 온 요청
+     · 주소에 약속한 낱말을 붙인 요청 (?k=…)
+   담을 넘으려면 넘을 수 있는 수준이지만, 지나가는 사람이 건드리지는 못합니다. */
+function allowed(request, env) {
+  const want = env.ACCESS_KEY;
+  if (!want) return true;                        // 낱말을 정하지 않았으면 열어 둡니다
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("k") === want) return true;
+
+  const from = request.headers.get("Origin") || request.headers.get("Referer") || "";
+  const ok = (env.ALLOW_ORIGIN || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return ok.some((o) => from.startsWith(o));
+}
+
 function json(body, seconds) {
   return new Response(JSON.stringify(body), {
     headers: { ...CORS, "Content-Type": "application/json; charset=utf-8",
@@ -383,7 +401,38 @@ function json(body, seconds) {
   });
 }
 
+/* GitHub 을 깨웁니다.
+   GitHub 자체 예약(schedule)은 10분 주기를 자주 건너뛰어, 여기서 정확히 불러 줍니다.
+   토큰은 Secret(GH_TOKEN)에 있고, 저장소 하나의 Actions 만 실행할 수 있는 권한이면 됩니다. */
+async function kickGitHub(env) {
+  if (!env.GH_TOKEN || !env.GH_REPO || !env.GH_WORKFLOW) {
+    console.log("깨우기 건너뜀 — 토큰이나 대상이 없습니다");
+    return;
+  }
+  const url = `https://api.github.com/repos/${env.GH_REPO}/actions/workflows/${env.GH_WORKFLOW}/dispatches`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.GH_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "signage-data",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ref: env.GH_REF || "main" }),
+  });
+  // 204 가 정상입니다. 그 외에는 무엇이 문제인지 로그에 남깁니다.
+  console.log(res.status === 204
+    ? "뉴스 수집을 깨웠습니다"
+    : `깨우기 실패 ${res.status}: ${(await res.text()).slice(0, 120)}`);
+}
+
 export default {
+  /* 10분마다 여기로 옵니다 (wrangler.jsonc 의 triggers.crons) */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(kickGitHub(env));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -392,9 +441,22 @@ export default {
       return json({ ok: true, at: kst().toISOString() }, 0);
     }
 
+    if (!allowed(request, env)) {
+      // 무엇이 있는지 알려 주지 않습니다
+      return new Response(JSON.stringify({ error: "허용되지 않은 요청입니다" }), {
+        status: 403,
+        headers: { ...CORS, "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+
     // 같은 값을 반복해서 받아오지 않도록 잠깐 담아 둡니다.
     const cache = caches.default;
-    const hit = await cache.match(request);
+    const ck = new URL(request.url);
+    ck.searchParams.delete("k");                 // 낱말은 캐시 열쇠에서 뺍니다
+    ck.searchParams.delete("t");
+    ck.searchParams.delete("x");
+    const cacheKey = new Request(ck.toString(), request);
+    const hit = await cache.match(cacheKey);
     if (hit) return hit;
 
     try {
@@ -408,9 +470,9 @@ export default {
         const pinMap = JSON.parse(env.BUS_PIN || "{}");
         res = json(await getBus(env, arsList, pinMap), CACHE_BUS);
       } else {
-        return json({ error: "없는 주소입니다", 창구: ["/weather", "/bus?ars=14112,14335", "/health"] }, 0);
+        return json({ error: "없는 주소입니다", 창구: ["/weather", "/bus", "/health"] }, 0);
       }
-      ctx.waitUntil(cache.put(request, res.clone()));
+      ctx.waitUntil(cache.put(cacheKey, res.clone()));
       return res;
     } catch (e) {
       // 무엇이 잘못됐는지 화면에서도 볼 수 있게 그대로 돌려줍니다.

@@ -9,27 +9,25 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-16",
 
+  // GitHub 의 예약 실행(schedule)은 짧은 주기를 자주 건너뜁니다.
+  // 여기서 정확히 깨워 주고, 뉴스 수집은 그쪽에서 하게 둡니다.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
   },
 
+  // 지역·정류소는 여기 적지 않습니다. 저장소가 공개라 근무지가 드러나기 때문입니다.
+  // 아래 이름들을 Secret 으로 넣습니다 (npx wrangler secret put <이름>):
+  //   LOCATION GRID_X GRID_Y LAT LON MID_LAND MID_TA AIR_STATION UV_AREA
+  //   BUS_ARS BUS_STID BUS_PIN
+  // 값이 없으면 서울시청 좌표로 돕니다(코드 안의 기본값).
   "vars": {
-    // 지역 설정 — 바꾸려면 여기만 고치고 다시 올리면 됩니다
-    "LOCATION": "서울 마포구 상암동",
-    "GRID_X": "58",
-    "GRID_Y": "127",
-    "LAT": "37.5794",
-    "LON": "126.8895",
-    "MID_LAND": "11B00000",
-    "MID_TA": "11B10101",
-    "AIR_STATION": "마포구",
-    "UV_AREA": "1144000000",
-
-    // 버스 — 기본 정류소와, 맨 위에 고정할 노선
-    "BUS_ARS": "14112,14335",
-    // ARS 로 안 될 때 쓸 9자리 고유번호 (서울 열린데이터광장에서 확인)
-    "BUS_STID": "{\"14112\":\"113000022\",\"14335\":\"113000432\"}",
-    "BUS_PIN": "{\"14112\":[\"9711\"]}"
+    "GH_REPO": "jhmigfailindo-ops/LH43QBCEBGCXKR_system",
+    "GH_WORKFLOW": "335605241",
+    "GH_REF": "main"
   }
 }

@@ -36,6 +36,7 @@ from datetime import datetime, timedelta
 
 BASE = pathlib.Path(__file__).parent
 CONF = BASE / "설정.json"
+CONF_LOCAL = BASE / "설정.로컬.json"     # 지역·정류소 (깃에 올리지 않습니다)
 OUT = BASE / "콘텐츠" / "데이터.js"
 IMGDIR = BASE / "콘텐츠" / "img"
 
@@ -91,7 +92,12 @@ def load_conf() -> dict:
     if not CONF.exists():
         sys.exit(f"설정 파일이 없습니다: {CONF}")
     cfg = json.loads(CONF.read_text(encoding="utf-8"))
-    # 인증키는 설정 파일이 아니라 .env / 환경변수에서 가져와 붙입니다.
+    # 지역·정류소는 따로 둡니다. 저장소가 공개라 근무지가 드러나기 때문입니다.
+    try:
+        cfg.update(json.loads(CONF_LOCAL.read_text(encoding="utf-8")))
+    except FileNotFoundError:
+        pass
+    # 인증키도 설정 파일이 아니라 .env / 환경변수에서 가져와 붙입니다.
     cfg.setdefault("공공데이터포털", {})["인증키"] = read_key()
     return cfg
 
@@ -589,7 +595,7 @@ def collect_weather(cfg: dict):
         log("⏭", "기상청 인증키가 아직 없습니다 — 날씨는 예시 데이터를 씁니다")
         return None
 
-    nx, ny = c.get("격자X", 58), c.get("격자Y", 127)
+    nx, ny = c.get("격자X", 60), c.get("격자Y", 127)
     today = datetime.now().strftime("%Y%m%d")
 
     # ① 단기예보 — 시간별 예보와 오늘·내일·모레 요약의 재료
@@ -733,7 +739,7 @@ def collect_weather(cfg: dict):
     air = collect_air(cfg) or (sample_air() if use_sample else None)
     uv = collect_uv(cfg) or (sample_uv() if use_sample else None)
 
-    rise, set_ = sun_times(c.get("위도", 37.5794), c.get("경도", 126.8895))
+    rise, set_ = sun_times(c.get("위도", 37.5665), c.get("경도", 126.9780))
     tail = ""
     if air:
         tail += f" · 미세 {air['pm10g']}{'(샘플)' if air.get('sample') else ''}"
@@ -807,7 +813,7 @@ def boost_read():
     """
     집중 갱신 표시 파일을 읽습니다.
     첫 줄은 누른 시각, 둘째 줄은 무엇을 볼지입니다.
-      all · ars:14112 · route:9711@14112
+      all · ars:<ARS번호> · route:<노선>@<ARS번호>
     """
     try:
         parts = BOOST.read_text(encoding="utf-8").strip().splitlines()
@@ -1144,34 +1150,9 @@ def sample_uv():
 
 
 def sample_bus(cfg: dict):
-    """버스 승인 전에 화면을 확인하기 위한 예시입니다."""
-    stops = ((cfg.get("공공데이터포털", {}).get("버스", {}) or {}).get("정류장", []))
-    demo = {
-        "14112": [("9711", "연신내", 193), ("7011", "서울역", 72), ("271", "중랑", 302),
-                  ("7730", "김포", 455), ("7715", "은평", 880), ("7016", "구파발", 512),
-                  ("7013", "은평", 640), ("마포08", "공덕", 725), ("673", "강서", 1010),
-                  ("171", "하계", 1180)],
-        "14335": [("710", "수색", 150), ("7727", "상암", 410), ("마포08", "공덕", 600),
-                  ("7013", "은평", 745), ("271", "중랑", 933), ("7019", "digital", 288),
-                  ("673", "강서", 1055), ("마포16", "망원", 360), ("6716", "김포", 820),
-                  ("7711", "은평", 1240)],
-    }
-    out = []
-    for st in stops:
-        ars = str(st.get("ARS", ""))
-        rows = demo.get(ars) or demo["14112"]
-        top = [x.strip() for x in st.get("우선노선", [])]
-        lines = []
-        for no, to, sec in rows:
-            m, ss = divmod(sec, 60)
-            lines.append({"no": no, "to": to, "sec": sec,
-                          "a": {"when": "곧 도착" if sec < 90 else f"{m}분 {ss:02d}초",
-                                "where": f"{max(1, sec // 120)}정거장", "soon": sec < 90},
-                          "b": {"when": f"{m + 9}분 {ss:02d}초", "where": "", "soon": False}})
-        lines.sort(key=lambda x: (top.index(x["no"]) if x["no"] in top else len(top), x["sec"]))
-        out.append({"ars": ars, "name": st.get("이름", ""), "dir": st.get("방면", ""),
-                    "pin": top, "lines": lines[: int(st.get("표시개수", 10))], "sample": True})
-    return out or None
+    """예전에 승인 전 화면을 보려고 쓰던 예시값입니다. 지금은 쓰지 않습니다
+    (지어낸 값을 실제처럼 보여주면 오히려 혼란스러워서)."""
+    return None
 
 
 # ─────────────────────── 하단바 흐름(속보) ───────────────────────

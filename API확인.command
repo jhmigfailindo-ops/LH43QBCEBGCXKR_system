@@ -23,6 +23,21 @@ def read_key():
     return ""
 
 
+def conf():
+    """지역 설정은 설정.로컬.json 에 있습니다 (깃에 올리지 않습니다)."""
+    try:
+        return json.loads(pathlib.Path("설정.로컬.json").read_text(encoding="utf-8"))["공공데이터포털"]
+    except Exception:
+        return {}
+
+
+C = conf()
+W = C.get("날씨", {})
+AIR = C.get("대기질", {}).get("측정소", "중구")
+UVA = C.get("자외선", {}).get("지역코드", "1100000000")
+STOPS = C.get("버스", {}).get("정류장", [])
+ARS = str(STOPS[0]["ARS"]) if STOPS else ""
+
 key = read_key()
 if not key:
     raise SystemExit("  인증키를 찾지 못했습니다. .env 파일에 DATA_GO_KR_KEY 를 넣어 주세요.")
@@ -79,7 +94,7 @@ CHECKS = [
     ("기상청 단기예보 (지금 기온·시간별)",
      "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst",
      {"base_date": bd.strftime("%Y%m%d"), "base_time": f"{vil_time:02d}00",
-      "nx": 58, "ny": 127, "dataType": "JSON", "numOfRows": 1, "pageNo": 1}),
+      "nx": W.get("격자X", 60), "ny": W.get("격자Y", 127), "dataType": "JSON", "numOfRows": 1, "pageNo": 1}),
 
     ("기상청 중기예보 (주간 6일)",
      "https://apis.data.go.kr/1360000/MidFcstInfoService/getMidTa",
@@ -87,16 +102,16 @@ CHECKS = [
 
     ("기상청 생활기상지수 (자외선)",
      "https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5",
-     {"areaNo": "1144000000", "time": uv_time, "dataType": "JSON", "numOfRows": 1, "pageNo": 1}),
+     {"areaNo": UVA, "time": uv_time, "dataType": "JSON", "numOfRows": 1, "pageNo": 1}),
 
     ("에어코리아 (미세·초미세)",
      "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty",
-     {"stationName": "마포구", "dataTerm": "DAILY", "returnType": "json",
+     {"stationName": AIR, "dataTerm": "DAILY", "returnType": "json",
       "numOfRows": 1, "pageNo": 1, "ver": "1.0"}),
 
     ("서울시 버스도착정보",
      "http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid",
-     {"arsId": "14112"}),
+     {"arsId": ARS}),
 ]
 
 print()

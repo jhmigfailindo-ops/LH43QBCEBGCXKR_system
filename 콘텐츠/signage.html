@@ -35,7 +35,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   -webkit-font-smoothing:antialiased}
 .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 
-#stage{position:absolute;top:0;left:0;width:1080px;height:1920px;background:#FFF;
+/* 무대 바탕은 검정입니다. 카드는 화면보다 45px 짧아(다음 카드가 살짝 보이라고)
+   빠르게 연속으로 넘길 때 아래쪽에 잠깐 틈이 생기는데, 바탕이 희면 그 틈이 번쩍입니다. */
+#stage{position:absolute;top:0;left:0;width:1080px;height:1920px;background:#000;
   border:36px solid #000;overflow:hidden;transform-origin:top left}
 
 /* ══ ① 목록 ══
@@ -448,6 +450,12 @@ const PRESS = (D.press && D.press.length) ? D.press : [{
    Cloudflare Workers 는 부르는 쪽(여기, 한국)과 가까운 곳에서 실행되므로
    서울에서 돌면서 국내 속도로 받아 옵니다. 인증키는 그쪽 Secret 에만 있습니다. */
 const WORKER = "https://signage-data.oqpr4444.workers.dev";
+
+/* 중계소는 아무 데서나 부를 수 없습니다.
+   응답에 정류소·좌표가 들어 있어 주소만 알면 근무지가 드러나기 때문입니다.
+   우리 화면(GitHub Pages·집 안 서버)에서 열면 Origin 으로 알아보고 통과시킵니다.
+   그 밖에서 시험해 볼 때는 주소에 ?k=낱말 을 붙이면 됩니다. */
+const wurl = (path) => `${WORKER}${path}`;
 
 /* 받아 온 값을 브라우저에 남겨 둡니다.
    새로 뜰 때 지난 값으로 곧바로 그리고, 새 값이 오면 갈아 끼웁니다.
@@ -862,7 +870,7 @@ function tickBusLeft() {
    중계소가 같은 값을 잠깐 담아 두므로, 자주 물어봐도 공공데이터를 그만큼 부르지는 않습니다. */
 async function pullWeather() {
   try {
-    const r = await fetch(`${WORKER}/weather`, { cache: "no-store" });
+    const r = await fetch(wurl("/weather"), { cache: "no-store" });
     const j = await r.json();
     if (!j || j.error || !j.hours) return;
     WX = j;
@@ -878,7 +886,7 @@ async function pullBus(force) {
   if (!force && Date.now() - busAsked < 3000) return;
   busAsked = Date.now();
   try {
-    const r = await fetch(`${WORKER}/bus`, { cache: "no-store" });
+    const r = await fetch(wurl("/bus"), { cache: "no-store" });
     const j = await r.json();
     if (!j || !j.stops) return;
     // 정류소 이름·방면은 설정에서 붙여 둔 것을 그대로 씁니다
