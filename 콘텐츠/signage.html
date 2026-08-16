@@ -570,7 +570,7 @@ function build() {
     <div class="group" data-g="${PRESS.length + 1}">
       <div class="top"><div class="press">BUS</div>
         <div class="pmeta mono">▲▼ <b id="bustg">—</b> · <span id="bushint">확인 집중조회</span>
-          · 초록 1회갱신 &nbsp;[ <span id="busat">${esc(D.busAt || "")}</span> ]</div></div>
+          · 노랑 1회갱신 &nbsp;[ <span id="busat">${esc(D.busAt || "")}</span> ]</div></div>
       <div class="bs" id="bsbody">${busHTML()}</div>${foot()}
     </div>`;
 
@@ -1289,9 +1289,9 @@ addEventListener("keydown", e => {
   // 어느 화면에서든 새로고침 — 파란 버튼 또는 숫자 0
   // 기기에 따라 key 이름(XF86Blue) 으로 오기도 하고 keyCode(406) 로 오기도 해서 둘 다 받습니다.
   if (K === "XF86Red" || c === 403) { setPause(!paused); e.preventDefault(); return; }
-  // 초록 — 어느 화면에서 눌러도 버스를 지금 한 번 받아옵니다.
+  // 노랑 — 어느 화면에서 눌러도 버스를 지금 한 번 받아옵니다.
   // 다른 화면이었다면 버스 카드로 함께 넘어갑니다.
-  if ((K === "XF86Green" || c === 404) && BUS.length) {
+  if ((K === "XF86Yellow" || c === 405) && BUS.length) {
     const here = (gi === BUSGI);
     if (!here) showGroup(BUSGI);
     busOnce(here);
