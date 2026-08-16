@@ -481,6 +481,7 @@ const MARQUEE = `<span class="seg">` +
 
 const GH = 1803;                         // 화면보다 45px 짧게 → 다음 언론사가 살짝 보임
 let BUS = recall("sgBus") || D.bus || [];
+const _bgot = recall("sgBusAt");
 const EXTRA = 3;                         // 뉴스 뒤 카드 수 (날씨 · 버스 · 공지)
 const N = PRESS.length + EXTRA;
 
@@ -645,6 +646,26 @@ function hourNext() {
 
 function hourReset() { if (hp) { hp = 0; drawHours(); } }
 
+/* ══ 버스 남은 시간 세기 ══
+   받아 온 값을 그대로 두면 다음 갱신(평소 5분)까지 숫자가 멈춰 있습니다.
+   받은 시각을 기억해 두고 1초씩 빼서 보여줍니다.
+   0 에 닿으면 "곧 도착" 으로 바꾸고 멈춥니다 — 버스는 신호에 걸려 늦기도 하니
+   음수로 내려가게 두지 않습니다. 첫차를 놓쳐도 둘째 차 시간이 이어서 흐릅니다.
+   새로 받은 값이 더 크면(도착 예측은 계속 다시 계산됩니다) 그 값으로 되돌아갑니다. */
+let busGotAt = 0;                                 // 마지막으로 값을 받은 시각
+
+function leftSec(sec) {
+  if (sec == null || !busGotAt) return null;
+  return sec - Math.floor((Date.now() - busGotAt) / 1000);
+}
+
+function fmtLeft(sec) {
+  if (sec == null) return null;
+  if (sec <= 0) return "곧 도착";
+  const m = Math.floor(sec / 60), x = sec % 60;
+  return m ? `${m}분 ${pad(x)}초` : `${x}초`;
+}
+
 /* 버스 칸 만들기 — 첫 화면과 30초 갱신이 같은 함수를 씁니다 */
 function busHTML() {
   if (!BUS.length) return `<div class="none">버스 정보를 받는 중입니다</div>`;
@@ -656,15 +677,17 @@ function busHTML() {
     </div>
     ${(st.lines || []).length ? st.lines.map(l => `
       <div class="bsrow${(st.pin || []).includes(l.no) ? " pin" : ""}"
-           data-no="${esc(l.no)}" data-ars="${esc(st.ars)}">
+           data-no="${esc(l.no)}" data-ars="${esc(st.ars)}"
+           data-sec="${l.sec ?? ""}" data-sec2="${l.sec2 ?? ""}">
         <div class="no">${esc(l.no)}</div>
         <div class="to">${l.to ? esc(l.to) + " 방향" : ""}</div>
         <div class="ar">
-          <span class="w${l.a.soon ? " soon" : ""}">${esc(l.a.when)}</span>
+          <span class="w${l.a.soon ? " soon" : ""}">${esc(fmtLeft(leftSec(l.sec)) || l.a.when)}</span>
           ${l.a.where ? `<span class="s">(${esc(l.a.where)})</span>` : ""}
         </div>
         <div class="nx">${l.b && l.b.when && l.b.when !== "정보 없음"
-          ? "다음 " + esc(l.b.when) + (l.b.where ? ` (${esc(l.b.where)})` : "") : ""}</div>
+          ? "다음 " + esc(fmtLeft(leftSec(l.sec2)) || l.b.when)
+            + (l.b.where ? ` (${esc(l.b.where)})` : "") : ""}</div>
       </div>`).join("") : `<div class="bsrow"><div class="to">도착 예정 버스가 없습니다</div></div>`}`
   ).join("");
 }
@@ -721,9 +744,10 @@ function busTickRows() {
     : st.lines.slice(0, 3);                          // 정류소를 고른 경우 앞 세 개
   return pick.map(l => ({
     no: l.no,
-    when: (l.a && l.a.when) || "정보 없음",
+    when: fmtLeft(leftSec(l.sec)) || (l.a && l.a.when) || "정보 없음",
     sub: [(l.a && l.a.where) ? `(${l.a.where})` : "",
-          (l.b && l.b.when && l.b.when !== "정보 없음") ? `다음 ${l.b.when}` : ""]
+          (l.b && l.b.when && l.b.when !== "정보 없음")
+            ? `다음 ${fmtLeft(leftSec(l.sec2)) || l.b.when}` : ""]
          .filter(Boolean).join("  "),
   }));
 }
@@ -751,6 +775,31 @@ function buildBusTick(rows) {
   }
   const seg = `<span class="seg">${parts.join("")}</span>`;
   return seg + seg;                                  // 끊기지 않게 두 벌
+}
+
+/* 1초마다 남은 시간만 고쳐 씁니다. 틀은 그대로라 흐름이 끊기지 않습니다. */
+function tickBusLeft() {
+  if (!busGotAt || !BUS.length) return;
+  document.querySelectorAll(".group").forEach(g => {
+    if (g.style.visibility === "hidden") return;
+    g.querySelectorAll(".bsrow[data-sec]").forEach(row => {
+      const st = BUS.find(x => x.ars === row.dataset.ars);
+      const l = st && st.lines.find(x => x.no === row.dataset.no);
+      if (!l) return;
+      const w = row.querySelector(".ar .w");
+      const t1 = fmtLeft(leftSec(l.sec));
+      if (w && t1 && w.textContent !== t1) {
+        w.textContent = t1;
+        w.classList.toggle("soon", t1 === "곧 도착");
+      }
+      const nx = row.querySelector(".nx");
+      const t2 = fmtLeft(leftSec(l.sec2));
+      if (nx && t2) {
+        const txt = "다음 " + t2 + (l.b && l.b.where ? ` (${l.b.where})` : "");
+        if (nx.textContent !== txt) nx.textContent = txt;
+      }
+    });
+  });
 }
 
 function drawBusTick() {
@@ -800,7 +849,8 @@ async function pullBus() {
     if (!j || !j.stops) return;
     // 정류소 이름·방면은 설정에서 붙여 둔 것을 그대로 씁니다
     BUS = j.stops.map(st => ({ ...st, name: st.name || st.ars, dir: st.dir || "" }));
-    keep("sgBus", BUS);
+    busGotAt = Date.now();
+    keep("sgBus", BUS); keep("sgBusAt", busGotAt);
     const body = $("bsbody"), at = $("busat");
     if (body) body.innerHTML = busHTML();
     if (at) at.textContent = j.at || "";
@@ -894,6 +944,16 @@ function renderNear() {
         진단 결과 렌더링은 230fps 로 여유가 있어, 그냥 두는 편이 훨씬 낫습니다.) */
   });
   setVisible();
+  footState();     // 방금 만들어진 카드의 하단바에도 지금 상태를 입힙니다
+}
+
+/* 하단바는 카드마다 하나씩 있는데, 뉴스 카드는 나중에 만들어집니다.
+   그래서 카드를 새로 그릴 때마다 지금 상태(속보·멈춤·버스)를 다시 입혀야 합니다. */
+function footState() {
+  drawNewsTick();
+  drawPause(paused);
+  drawBusTick();
+  drawLeft();
 }
 
 /* 행의 높이와 위치를 직접 계산해 넣습니다.
@@ -1268,6 +1328,7 @@ function tick(force) {
   const d = new Date();
   const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   drawLeft();
+  tickBusLeft();
   drawBusTick();
   if (gi === BUSGI) drawBusSel();
   document.querySelectorAll(".group").forEach(g => {
@@ -1325,6 +1386,7 @@ preloadImages();
 build(); fit(); BT = boostTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
 
 /* 중계소에서 날씨·버스를 받아옵니다 (지난 값으로 이미 그려 둔 위에 갈아 끼웁니다) */
+if (_bgot && Date.now() - _bgot < 30 * 60 * 1000) busGotAt = _bgot;
 pullWeather(); pullBus();
 setInterval(pullWeather, 600000);
 setInterval(tick, 1000);

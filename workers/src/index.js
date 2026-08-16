@@ -332,8 +332,11 @@ async function getBus(env, arsList, pinMap) {
       const no = pick(blk, "rtNm");
       if (!no) continue;
       stNm ||= pick(blk, "stNm");
+      // sec·sec2 는 화면에서 1초씩 세어 내려가는 데 씁니다 (첫차·둘째차 각각)
       lines.push({
-        no, to: pick(blk, "adirection"), sec: +(pick(blk, "traTime1") || 9999),
+        no, to: pick(blk, "adirection"),
+        sec: +(pick(blk, "traTime1") || 0) || null,
+        sec2: +(pick(blk, "traTime2") || 0) || null,
         stId: pick(blk, "stId"), rtId: pick(blk, "busRouteId"), ord: pick(blk, "staOrd"),
         a: busMsg(pick(blk, "arrmsg1")), b: busMsg(pick(blk, "arrmsg2")),
       });
@@ -341,12 +344,14 @@ async function getBus(env, arsList, pinMap) {
     const top = pinMap[ars] || [];
     lines.sort((x, y) => {
       const a = top.indexOf(x.no), b = top.indexOf(y.no);
-      return (a < 0 ? top.length : a) - (b < 0 ? top.length : b) || x.sec - y.sec;
+      return (a < 0 ? top.length : a) - (b < 0 ? top.length : b)
+        || (x.sec ?? 99999) - (y.sec ?? 99999);
     });
     stops.push({ ars, name: stNm, dir: "", pin: top, lines });
   }
   const now = kst();
-  return { stops, at: `${p2(now.getUTCHours())}:${p2(now.getUTCMinutes())}:${p2(now.getUTCSeconds())}` };
+  return { stops, ms: Date.now(),
+           at: `${p2(now.getUTCHours())}:${p2(now.getUTCMinutes())}:${p2(now.getUTCSeconds())}` };
 }
 
 /* ───────────────────────── 입구 ───────────────────────── */
