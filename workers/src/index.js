@@ -313,39 +313,6 @@ function busMsg(raw) {
 
 const pick = (blk, tag) => (blk.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`)) || [, ""])[1].trim();
 
-/* 승인 전에도 화면을 볼 수 있게 하는 예시값.
-   실제 노선 구성이 아니며, 화면에 '샘플' 표시가 함께 나옵니다.
-   서울시 버스도착정보가 열리는 순간 이 자리는 실제 값으로 바뀝니다. */
-const DEMO = {
-  "14112": [["9711", "연신내", 193], ["7011", "서울역", 72], ["271", "중랑", 302],
-            ["7730", "김포", 455], ["7016", "구파발", 512], ["7013", "은평", 640],
-            ["마포08", "공덕", 725], ["7715", "은평", 880], ["673", "강서", 1010],
-            ["171", "하계", 1180]],
-  "14335": [["710", "수색", 150], ["7019", "디지털단지", 288], ["마포16", "망원", 360],
-            ["7727", "상암", 410], ["마포08", "공덕", 600], ["7013", "은평", 745],
-            ["6716", "김포", 820], ["271", "중랑", 933], ["673", "강서", 1055],
-            ["7711", "은평", 1240]],
-};
-
-function sampleStop(ars, top) {
-  const rows = DEMO[ars] || DEMO["14112"];
-  const lines = rows.map(([no, to, sec]) => {
-    const m = Math.floor(sec / 60), x = sec % 60;
-    return {
-      no, to, sec, sec2: sec + 540,
-      a: { when: sec < 90 ? "곧 도착" : `${m}분 ${p2(x)}초`,
-           where: `${Math.max(1, Math.floor(sec / 120))}정거장`, soon: sec < 90 },
-      b: { when: `${m + 9}분 ${p2(x)}초`, where: "", soon: false },
-    };
-  });
-  lines.sort((x, y) => {
-    const a = top.indexOf(x.no), b = top.indexOf(y.no);
-    return (a < 0 ? top.length : a) - (b < 0 ? top.length : b) || x.sec - y.sec;
-  });
-  return { ars, name: ars === "14335" ? "월드컵파크 9·10·11·12단지" : "DMC첨단산업센터",
-           dir: ars === "14112" ? "상암고등학교 방면" : "", pin: top, lines, sample: true };
-}
-
 async function getBus(env, arsList, pinMap) {
   const key = env.DATA_GO_KR_KEY;
   const stops = [];
@@ -355,11 +322,9 @@ async function getBus(env, arsList, pinMap) {
     const raw = await res.text();
     const code = (raw.match(/<headerCd>(.*?)<\/headerCd>/) || [, "?"])[1];
     if (code !== "0") {
-      // 아직 승인 전이면 예시값으로 채웁니다 (화면에 '샘플' 표시가 붙습니다)
+      // 받지 못하면 그대로 알립니다. 지어낸 값을 보여주면 오히려 혼란스럽습니다.
       const msg = (raw.match(/<headerMsg>(.*?)<\/headerMsg>/) || [, "?"])[1];
-      const st = sampleStop(ars, pinMap[ars] || []);
-      st.error = msg;
-      stops.push(st);
+      stops.push({ ars, name: "", dir: "", pin: pinMap[ars] || [], lines: [], error: msg });
       continue;
     }
     const lines = [];

@@ -272,7 +272,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bsrow .nx{flex:0 0 190px;text-align:right;font-size:21px;font-weight:700;
   opacity:.45;letter-spacing:-1px;white-space:nowrap}
 .bs .none{flex:1;display:flex;align-items:center;justify-content:center;
-  font-size:28px;font-weight:700;color:#999}
+  font-size:27px;font-weight:700;color:#999;letter-spacing:-1px;text-align:center}
 /* 리모컨으로 고른 대상 — 왼쪽에 굵은 막대 */
 .bsrow.sel{box-shadow:inset 14px 0 0 #000}
 .bsrow.pin.sel,.bstop.sel{box-shadow:inset 14px 0 0 #FFF}
@@ -673,11 +673,17 @@ function busHTML() {
   if (!BUS.length) return `<div class="none">버스 정보를 받는 중입니다</div>`;
   return BUS.map(st => `
     <div class="bstop" data-ars="${esc(st.ars)}">
-      <div class="nm">${esc(st.name)}${st.dir ? `<em>${esc(st.dir)}</em>` : ""}</div>
+      <div class="nm">${esc(st.name || st.ars)}${st.dir ? `<em>${esc(st.dir)}</em>` : ""}</div>
       ${st.sample ? `<div class="smp">샘플</div>` : ""}
       <div class="ars mono">${esc(st.ars)}</div>
     </div>
-    ${(st.lines || []).length ? st.lines.map(l => `
+    ${!(st.lines || []).length ? `
+      <div class="bsrow"><div class="none">${st.error
+        ? (String(st.error).includes("NOT REGISTERED") || String(st.error).includes("인증")
+            ? "도착정보를 아직 받을 수 없습니다 (서비스 승인 반영 대기)"
+            : esc(String(st.error).slice(0, 46)))
+        : "지금은 도착 예정 버스가 없습니다"}</div></div>`
+      : st.lines.map(l => `
       <div class="bsrow${(st.pin || []).includes(l.no) ? " pin" : ""}"
            data-no="${esc(l.no)}" data-ars="${esc(st.ars)}"
            data-sec="${l.sec ?? ""}" data-sec2="${l.sec2 ?? ""}">
@@ -690,7 +696,7 @@ function busHTML() {
         <div class="nx">${l.b && l.b.when && l.b.when !== "정보 없음"
           ? "다음 " + esc(fmtLeft(leftSec(l.sec2)) || l.b.when)
             + (l.b.where ? ` (${esc(l.b.where)})` : "") : ""}</div>
-      </div>`).join("") : `<div class="bsrow"><div class="to">도착 예정 버스가 없습니다</div></div>`}`
+      </div>`).join("")}`
   ).join("");
 }
 
