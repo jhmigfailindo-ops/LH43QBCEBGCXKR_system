@@ -22,6 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    # GitHub 서버는 UTC 로 돕니다. 그대로 두면 화면의 갱신 시각이
+    # 아홉 시간 전으로 찍힙니다(01:16 을 16:16 으로).
+    env:
+      TZ: Asia/Seoul
+
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +69,7 @@ jobs:
           git add -A
           git -c user.name="signage-bot" \
               -c user.email="signage-bot@users.noreply.github.com" \
-              commit -q -m "데이터 갱신 $(date -u '+%Y-%m-%d %H:%M') UTC"
+              commit -q -m "데이터 갱신 $(date '+%Y-%m-%d %H:%M')"
           # 갈래를 통째로 덮어써서 예전 기록이 쌓이지 않게 합니다.
           # (10분마다 사진까지 쌓이면 저장소가 하루에 수백 MB씩 불어납니다)
           git push -q --force \

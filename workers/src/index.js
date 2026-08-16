@@ -19,7 +19,11 @@ const VILAGE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
 const MIDFCST = "https://apis.data.go.kr/1360000/MidFcstInfoService";
 const UV_URL = "https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5";
 const AIR_URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty";
+// 서울시는 서비스마다 창구가 다릅니다. 어느 쪽이 먼저 열리든 쓰도록 둘 다 준비합니다.
+//   ① 정류소정보조회  — ARS 번호(표지판 5자리)로 그 정류소의 전체 노선
+//   ② 버스도착정보조회 — stId(서울시 9자리 고유번호)로 같은 내용
 const BUS_URL = "http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid";
+const BUS_URL2 = "http://ws.bus.go.kr/api/rest/arrive/getLowArrInfoByStId";
 
 // 같은 값을 여러 번 받아오지 않도록 잠깐 담아 둡니다 (공공데이터 하루 한도를 아끼려고)
 const CACHE_WEATHER = 600;   // 10분
@@ -313,20 +317,31 @@ function busMsg(raw) {
 
 const pick = (blk, tag) => (blk.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`)) || [, ""])[1].trim();
 
+async function askBus(url, key) {
+  const res = await fetch(`${url}&serviceKey=${key}`, { signal: AbortSignal.timeout(12000) });
+  const raw = await res.text();
+  const code = (raw.match(/<headerCd>(.*?)<\/headerCd>/) || [, "?"])[1];
+  const msg = (raw.match(/<headerMsg>(.*?)<\/headerMsg>/) || [, "?"])[1];
+  return { ok: code === "0", raw, msg };
+}
+
 async function getBus(env, arsList, pinMap) {
   const key = env.DATA_GO_KR_KEY;
+  const stIdMap = JSON.parse(env.BUS_STID || "{}");
   const stops = [];
   for (const ars of arsList) {
-    const res = await fetch(`${BUS_URL}?arsId=${encodeURIComponent(ars)}&serviceKey=${key}`,
-      { signal: AbortSignal.timeout(12000) });
-    const raw = await res.text();
-    const code = (raw.match(/<headerCd>(.*?)<\/headerCd>/) || [, "?"])[1];
-    if (code !== "0") {
+    // ① ARS 로 물어보고, 안 되면 ② stId 로 다시 물어봅니다
+    let r = await askBus(`${BUS_URL}?arsId=${encodeURIComponent(ars)}`, key);
+    if (!r.ok && stIdMap[ars]) {
+      const r2 = await askBus(`${BUS_URL2}?stId=${encodeURIComponent(stIdMap[ars])}`, key);
+      if (r2.ok) r = r2;
+    }
+    if (!r.ok) {
       // 받지 못하면 그대로 알립니다. 지어낸 값을 보여주면 오히려 혼란스럽습니다.
-      const msg = (raw.match(/<headerMsg>(.*?)<\/headerMsg>/) || [, "?"])[1];
-      stops.push({ ars, name: "", dir: "", pin: pinMap[ars] || [], lines: [], error: msg });
+      stops.push({ ars, name: "", dir: "", pin: pinMap[ars] || [], lines: [], error: r.msg });
       continue;
     }
+    const raw = r.raw;
     const lines = [];
     let stNm = "";
     for (const blk of raw.match(/<itemList>[\s\S]*?<\/itemList>/g) || []) {
