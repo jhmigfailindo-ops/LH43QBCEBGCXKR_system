@@ -156,6 +156,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 
 .noanim .row,.noanim .head,.noanim .num,.noanim .title,.noanim .media img{transition:none !important}
 
+/* 화면이 처음 뜰 때 — 카드는 고리처럼 이어져 있어 첫 카드 위에 마지막 카드가 붙습니다.
+   자리를 잡는 그 한 번에 전환이 걸리면, 위쪽 카드가 아래에서 미끄러져 올라오는 것이
+   보입니다. 첫 배치만 전환을 끄고, 자리를 잡은 뒤에 켭니다. */
+.booting .group{transition:none !important}
+
 .foot{height:74px;background:#000;color:#FFF;font-size:25px;padding:0 34px;flex-shrink:0;
   display:flex;justify-content:space-between;align-items:center;letter-spacing:-.5px}
 .foot .r{display:flex;gap:26px}
@@ -1457,7 +1462,11 @@ function preloadImages() {
 /* ══ 시작 ══ */
 document.body.setAttribute("tabindex", "0");
 preloadImages();
+document.body.classList.add("booting");        // 첫 배치는 소리 없이
 build(); fit(); BT = boostTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
+// 자리를 다 잡은 뒤 전환을 켭니다.
+// (화면이 가려져 있으면 requestAnimationFrame 이 멈춰 버려서, 시간으로 겁니다)
+setTimeout(() => document.body.classList.remove("booting"), 80);
 
 /* 중계소에서 날씨·버스를 받아옵니다 (지난 값으로 이미 그려 둔 위에 갈아 끼웁니다) */
 if (_bgot && Date.now() - _bgot < 30 * 60 * 1000) busGotAt = _bgot;
