@@ -21,6 +21,7 @@
   ./.venv/bin/python 수집기.py --반복     설정한 주기마다 계속 수집 (Ctrl+C 종료)
 """
 
+import html
 import json
 import os
 import pathlib
@@ -254,7 +255,9 @@ def fetch_meta(url: str, press: str = "") -> dict:
     m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]*content=["\']([^"\']+)', page, re.I) \
         or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]*property=["\']og:image["\']', page, re.I)
     if m:
-        out["image"] = m.group(1).strip()
+        # HTML 안의 주소는 & 가 &amp; 로 적혀 있습니다. 그대로 쓰면 서버가
+        # 주소를 못 읽습니다(조선일보 리사이저는 400 을 돌려줍니다).
+        out["image"] = html.unescape(m.group(1).strip())
 
     d = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]*content=["\']([^"\']+)', page, re.I) \
         or re.search(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']+)', page, re.I)

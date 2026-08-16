@@ -313,7 +313,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wtop{background:#000;color:#FFF;padding:20px 34px;flex-shrink:0;display:flex;
   justify-content:space-between;align-items:center;font-size:26px}
 .wvp{flex:1;overflow:hidden;position:relative;background:#FFF}
-#wfr{width:100%;height:9000px;border:0;display:block;transition:transform .16s ease-out}
+#wfr{width:100%;height:9000px;border:0;display:block;transition:transform .16s ease-out;
+  pointer-events:none}
 .bar{height:10px;background:#333;flex-shrink:0}
 .bar i{display:block;height:100%;background:#FFF;width:0;transition:width .16s}
 
@@ -1274,6 +1275,11 @@ async function busBoost() {
      리모컨 조작(방향키 수신)과 맞바꿔지는 성질입니다.
      그래서 가로채기(capture) 대신 일반 단계에서 듣고,
      다른 처리기가 먼저 손댄 이벤트는 아예 건드리지 않습니다. */
+/* 마우스로 눌렸을 때 포커스를 되찾습니다 (리모컨이 먹지 않는 일을 막습니다) */
+addEventListener("mousedown", () => {
+  try { window.focus(); document.body.focus(); } catch (e) {}
+}, true);
+
 addEventListener("keydown", e => {
   lastKeyAt = Date.now();                 // 키가 온다 = 포커스가 살아있음
   if (e.defaultPrevented) return;         // 이미 누가 처리한 키는 그대로 둡니다
