@@ -537,7 +537,7 @@ function weatherInner() {
           <div><b>일출 · 일몰</b><i class="two mono">${esc(WX.sunrise || "--:--")}<br>${esc(WX.sunset || "--:--")}</i></div>
         </div>
         <div class="wxhr">
-          <div class="htabs" id="htabs" style="grid-template-columns:repeat(${HPAGES},1fr)">${tabsHTML()}</div>
+          <div class="htabs" id="htabs" style="grid-template-columns:repeat(${hpages()},1fr)">${tabsHTML()}</div>
           <div class="hgrid" id="hgrid">${hoursHTML()}</div>
         </div>
         <div class="wk">
@@ -591,7 +591,7 @@ function build() {
    한 화면에 8칸씩만 들어가서, 확인 버튼으로 다음 8시간을 봅니다.
    모아 둔 것이 24칸이라 세 쪽이며, 마지막에서 누르면 처음으로 돌아옵니다. */
 const HPP = 8;                                                   // 한 쪽에 여덟 칸
-const HPAGES = Math.max(1, Math.ceil((WX.hours || []).length / HPP));
+const hpages = () => Math.max(1, Math.ceil((WX.hours || []).length / HPP));
 let hp = 0;
 
 function hourSlice() { return (WX.hours || []).slice(hp * HPP, hp * HPP + HPP); }
@@ -600,7 +600,7 @@ function hourSlice() { return (WX.hours || []).slice(hp * HPP, hp * HPP + HPP); 
 function tabsHTML() {
   const all = WX.hours || [];
   let out = "";
-  for (let i = 0; i < HPAGES; i++) {
+  for (let i = 0; i < hpages(); i++) {
     const g = all.slice(i * HPP, i * HPP + HPP);
     if (!g.length) continue;
     const a = g[0], b = g[g.length - 1];
@@ -639,8 +639,9 @@ function drawHours(move) {
 }
 
 function hourNext() {
-  if (HPAGES < 2) return;
-  hp = (hp + 1) % HPAGES;      // 끝까지 가면 다시 처음으로
+  const n = hpages();
+  if (n < 2) return;
+  hp = (hp + 1) % n;           // 끝까지 가면 다시 처음으로
   drawHours(true);
 }
 
