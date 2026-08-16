@@ -340,14 +340,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
   background-size:4px 4px}
 /* 버스 집중조회 중 — 흰 전광판 (멈춤이 켜지면 그쪽이 우선입니다) */
-.foot .btick{display:none}
-.foot.bus .lbl{display:none}
-.foot.bus .btick{display:block;flex:1;height:74px;overflow:hidden;position:relative;margin-right:24px}
-.foot.hold .btick{display:none}
-.btrk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
-  white-space:nowrap;will-change:transform;animation:flow 20s linear infinite}
-.btrk .seg{display:flex;align-items:center;gap:80px;padding-right:80px}
-.btrk .one{display:flex;align-items:center;gap:12px}
 .kwht{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
   background:#EDEDED;color:#000;font-weight:900;font-size:23px;letter-spacing:0;
   padding:5px 13px;border-radius:5px;overflow:hidden}
@@ -359,8 +351,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
   background-size:4px 4px}
 
-/* 버스 조각만 앰버 — 실제 버스 도착안내기 색입니다.
-   같은 띠에 속보(흰색)와 번갈아 흐르므로 색으로 구분됩니다. */
+/* 집중조회 중인 노선 — 하단바 왼쪽에 고정해 둡니다.
+   흘러가면 놓치기 때문에, 급할 때 보는 값은 제자리에 둡니다.
+   속보는 그 오른쪽에서 따로 흐릅니다(섞이지 않습니다). */
+.foot .bfix{display:none}
+/* 집중 노선 칸 — 왼쪽에 자리를 잡고, 내용이 칸을 넘칠 때만 그 안에서 흐릅니다.
+   한 노선만 보고 있을 때(대부분)는 흐르지 않고 제자리에 붙어 있습니다. */
+.foot.bfix-on .bfix{display:block;flex:0 0 auto;height:74px;
+  overflow:hidden;position:relative;
+  padding-right:22px;margin-right:22px;border-right:6px solid #333}
+.bftrk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
+  white-space:nowrap;will-change:transform}
+.bftrk.move{animation:flow linear infinite}
+.bftrk .seg{display:flex;align-items:center;gap:44px;padding-right:44px}
+.bfix .one{display:flex;align-items:center;gap:11px;white-space:nowrap}
 .amber .kwht{background:#FFB000;color:#000}
 .amber .ledw{color:#FFB000;text-shadow:0 0 3px rgba(255,176,0,.45)}
 
@@ -368,7 +372,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .foot .ntick{display:none}
 .foot.news .lbl{display:none}
 .foot.news .ntick{display:block;flex:1;height:74px;overflow:hidden;position:relative;margin-right:24px}
-.foot.hold .ntick,.foot.bus .ntick{display:none}
+.foot.hold .ntick{display:none}
+.foot.hold .bfix{display:none}
 .ntrk{position:absolute;top:0;left:0;height:74px;display:flex;align-items:center;
   white-space:nowrap;will-change:transform;animation:flow 60s linear infinite}
 .ntrk .seg{display:flex;align-items:center;gap:70px;padding-right:70px}
@@ -504,8 +509,8 @@ addEventListener("resize", fit);
 
 /* 카드 맨 아래 띠 — 여러 곳에서 쓰므로 전역에 둡니다 */
 const foot = () => `<div class="foot mono"><span class="lbl">+ ADDITIONAL FEEDS</span>
+      <div class="bfix"></div>
       <div class="tick"><div class="trk">${MARQUEE}${MARQUEE}</div></div>
-      <div class="btick"><div class="btrk"></div></div>
       <div class="ntick"><div class="ntrk">${newsTickHTML()}</div></div>
       <span class="clock">--:--:--</span></div>`;
 
@@ -570,7 +575,7 @@ function build() {
     <div class="group" data-g="${PRESS.length + 1}">
       <div class="top"><div class="press">BUS</div>
         <div class="pmeta mono">▲▼ <b id="bustg">—</b> · <span id="bushint">확인 집중조회</span>
-          · 노랑 1회갱신 &nbsp;[ <span id="busat">${esc(D.busAt || "")}</span> ]</div></div>
+          · 노랑 1회갱신 &nbsp;[ <span id="busat">받는 중</span> ]</div></div>
       <div class="bs" id="bsbody">${busHTML()}</div>${foot()}
     </div>`;
 
@@ -659,6 +664,17 @@ let busGotAt = 0;                                 // 마지막으로 값을 받�
 function leftSec(sec) {
   if (sec == null || !busGotAt) return null;
   return sec - Math.floor((Date.now() - busGotAt) / 1000);
+}
+
+/* 받아 온 지 얼마나 됐는지. 1초마다 같이 흘러가서, 지금 보는 값이
+   방금 것인지 한참 전 것인지 바로 알 수 있습니다. */
+function agoText() {
+  if (!busGotAt) return "받는 중";
+  const g = Math.floor((Date.now() - busGotAt) / 1000);
+  if (g < 3) return "방금";
+  if (g < 60) return `${g}초 전`;
+  const m = Math.floor(g / 60);
+  return m < 60 ? `${m}분 ${pad(g % 60)}초 전` : `${Math.floor(m / 60)}시간 전`;
 }
 
 function fmtLeft(sec) {
@@ -760,34 +776,64 @@ function busTickRows() {
   }));
 }
 
-/* 틀 만들기 — 줄 수가 바뀔 때만 다시 짭니다.
-   속보(흰색) 한 건과 버스(앰버) 한 건을 번갈아 놓습니다.
-   버스 값은 10초마다 바뀌므로 자리(.w/.s)만 잡아 두고 글자는 나중에 채웁니다. */
-function buildBusTick(rows) {
-  const busOne = r => `<span class="one amber"><b class="kwht">${esc(r.no)}</b>` +
-    `<span class="ledw w"></span><span class="ledw sub s"></span></span>`;
-  const newsOne = x => `<span class="one">` +
-    `<b class="kwht">${esc(x.p || "뉴스")}</b>` +
-    (x.hot ? "" : `<span class="ledw sub">${esc(x.ago)}</span>`) +
-    `<span class="ledw">${esc(x.t)}</span></span>`;
 
-  const news = TICKER.slice(0, 4);
-  const parts = [];
-  if (!news.length) {
-    rows.forEach(r => parts.push(busOne(r)));        // 흘릴 기사가 없으면 버스만
-  } else {
-    news.forEach((x, i) => {                         // 기사 하나 → 버스 하나 → 기사 하나 …
-      parts.push(newsOne(x));
-      parts.push(busOne(rows[i % rows.length]));
+/* 하단바 왼쪽 고정 칸 — 집중조회 중인 노선을 제자리에 붙여 둡니다.
+   흘러가면 급할 때 놓치므로, 남은 시간이 그 자리에서 계속 줄어듭니다.
+   속보는 그 오른쪽에서 따로 흐릅니다(서로 섞이지 않습니다). */
+function drawBusTick() {
+  const on = !!(boostCur && Date.now() < boostUntil && !paused);
+  document.querySelectorAll(".foot").forEach(f => f.classList.toggle("bfix-on", on));
+  if (!on) return;
+
+  const rows = busTickRows();
+  if (!rows.length) return;
+  const key = rows.map(r => r.no).join(",");
+
+  document.querySelectorAll(".group").forEach(g => {
+    if (g.style.visibility === "hidden") return;
+    const box = g.querySelector(".bfix");
+    if (!box) return;
+    if (box.dataset.key !== key) {            // 노선이 바뀔 때만 새로 짭니다
+      const seg = `<span class="seg">` + rows.map(r =>
+        `<span class="one amber"><b class="kwht">${esc(r.no)}</b>` +
+        `<span class="ledw w"></span><span class="ledw sub s"></span></span>`).join("") + `</span>`;
+      // 넘칠 때 끊기지 않게 두 벌 넣습니다 (넘치지 않으면 둘째 벌은 안 보입니다)
+      box.innerHTML = `<div class="bftrk">${seg}${seg}</div>`;
+      box.dataset.key = key;
+      box.dataset.fit = "";                   // 폭은 값이 채워진 뒤에 잽니다
+    }
+    const ws = box.querySelectorAll(".w"), ss = box.querySelectorAll(".s");
+    const n = rows.length;
+    rows.forEach((r, i) => {
+      [i, i + n].forEach(k => {               // 두 벌 모두 같은 값으로
+        if (ws[k] && ws[k].textContent !== r.when) ws[k].textContent = r.when;
+        if (ss[k] && ss[k].textContent !== r.sub) ss[k].textContent = r.sub;
+      });
     });
-  }
-  const seg = `<span class="seg">${parts.join("")}</span>`;
-  return seg + seg;                                  // 끊기지 않게 두 벌
+
+    // 칸을 넘치면 그 안에서 흐르게, 넉넉하면 제자리에 둡니다
+    // 칸 폭을 정합니다. 내용이 짧으면 그만큼만, 길면 최대치까지 쓰고 그 안에서 흐릅니다.
+    // (안쪽이 absolute 라 폭을 직접 잡아 주지 않으면 0 이 됩니다)
+    const trk = box.querySelector(".bftrk");
+    if (trk && box.dataset.fit !== key) {
+      const one = trk.scrollWidth / 2;
+      if (one > 10) {
+        const w = Math.min(one, BFIX_MAX);
+        box.style.width = w + "px";
+        const over = one > w + 2;
+        trk.classList.toggle("move", over);
+        trk.style.animationDuration = over ? (one / TICK_SPEED).toFixed(1) + "s" : "";
+        box.dataset.fit = key;
+      }
+    }
+  });
 }
 
 /* 1초마다 남은 시간만 고쳐 씁니다. 틀은 그대로라 흐름이 끊기지 않습니다. */
 function tickBusLeft() {
   if (!busGotAt || !BUS.length) return;
+  const at = $("busat");
+  if (at) { const t = agoText(); if (at.textContent !== t) at.textContent = t; }
   document.querySelectorAll(".group").forEach(g => {
     if (g.style.visibility === "hidden") return;
     g.querySelectorAll(".bsrow[data-sec]").forEach(row => {
@@ -810,30 +856,6 @@ function tickBusLeft() {
   });
 }
 
-function drawBusTick() {
-  const on = Date.now() < boostUntil && !paused;
-  document.querySelectorAll(".foot").forEach(f => f.classList.toggle("bus", on));
-  if (!on) return;
-  const rows = busTickRows();
-  if (!rows.length) return;
-  const key = rows.map(r => r.no).join(",") + "|" + TICKER.length;
-  document.querySelectorAll(".group").forEach(g => {
-    if (g.style.visibility === "hidden") return;
-    const trk = g.querySelector(".btrk");
-    if (!trk) return;
-    if (trk.dataset.key !== key) {                   // 노선 구성이 바뀌었을 때만 새로 짜기
-      trk.innerHTML = buildBusTick(rows);
-      trk.dataset.key = key;
-      fitSpeed(trk);
-    }
-    const ws = trk.querySelectorAll(".w"), ss = trk.querySelectorAll(".s");
-    ws.forEach((el, k) => {                          // 자리 순서대로 채웁니다
-      const r = rows[k % rows.length];
-      if (el.textContent !== r.when) el.textContent = r.when;
-      if (ss[k] && ss[k].textContent !== r.sub) ss[k].textContent = r.sub;
-    });
-  });
-}
 
 /* ══ 중계소에서 받아 오기 ══
    날씨는 10분에 한 번, 버스는 상황에 따라 5분·30초·10초 간격으로 물어봅니다.
@@ -850,7 +872,11 @@ async function pullWeather() {
   } catch (e) {}
 }
 
-async function pullBus() {
+let busAsked = 0;
+async function pullBus(force) {
+  // 진입 갱신과 노란 버튼이 잇달아 부르는 일이 있어, 몇 초 안의 중복은 건너뜁니다
+  if (!force && Date.now() - busAsked < 3000) return;
+  busAsked = Date.now();
   try {
     const r = await fetch(`${WORKER}/bus`, { cache: "no-store" });
     const j = await r.json();
@@ -859,9 +885,8 @@ async function pullBus() {
     BUS = j.stops.map(st => ({ ...st, name: st.name || st.ars, dir: st.dir || "" }));
     busGotAt = Date.now();
     keep("sgBus", BUS); keep("sgBusAt", busGotAt);
-    const body = $("bsbody"), at = $("busat");
+    const body = $("bsbody");
     if (body) body.innerHTML = busHTML();
-    if (at) at.textContent = j.at || "";
     if (!BT.length) BT = boostTargets();
     drawBusSel();
     drawBusTick();
@@ -874,10 +899,25 @@ async function pullBus() {
 const refreshBus = pullBus;
 /* 평소에는 1분마다 읽고, 집중조회를 켜면 수집기 주기에 맞춰 10초마다 읽습니다.
    여기서 읽는 것은 우리 서버의 파일이라 공공데이터 사용량과 무관합니다. */
-const BUS_CALM = 300000;                       // 평소 5분
-let busTimer = setInterval(refreshBus, BUS_CALM);
-function setBusRead(ms) { clearInterval(busTimer); busTimer = setInterval(refreshBus, ms); }
+/* 언제 받아올지
+     · 버스 카드에 들어올 때   한 번
+     · 멈춰 두고 계속 볼 때    15초마다
+     · 그 밖에는              받지 않습니다
+   자동으로 넘어갈 때는 버스 카드에 18초만 머무르므로 들어올 때 한 번이면 충분합니다.
+   그동안 남은 시간은 화면에서 1초씩 줄어들고 있습니다.
+   노선 집중조회는 이와 별개로 돕니다. 쓰는 창구가 달라 한도도 따로입니다. */
+const BUS_WATCH = 15000;
+let busTimer = 0;
+function setBusRead(ms) {
+  clearInterval(busTimer);
+  busTimer = ms ? setInterval(refreshBus, ms) : 0;
+}
 let busCalm = 0;
+
+/* 멈춰 두고 버스 카드를 보고 있을 때만 이어서 받습니다 */
+function busReadMode() {
+  setBusRead(gi === BUSGI && paused ? BUS_WATCH : 0);
+}
 
 /* 보이는 언론사(±1)만 내용을 채우고, 멀어지면 비웁니다 */
 /* 화면 밖 카드는 그리기 대상에서 뺍니다.
@@ -1034,6 +1074,10 @@ function showGroup(i) {
   clearTimeout(moveT);
   moveT = setTimeout(() => { moving = false; tick(true); }, 620);
 
+  if (gi !== PRESS.length) hourReset();          // 날씨 카드를 떠나면 처음 여덟 칸으로
+  if (gi === BUSGI && prev !== gi) pullBus();    // 버스 카드에 들어오면 그때 받아옵니다
+  busReadMode();                                 // 보고 있을 때만 이어서 받습니다
+
   // 떠나는 카드: 아코디언이 아직 도는 중일 때만 그 자리에 고정
   if (prevRi !== 0) setRows(document.querySelector(`.group[data-g="${prev}"]`), prevRi, false);
 
@@ -1122,7 +1166,7 @@ function auto() {
    멈춘 동안에는 10분마다 하는 새로고침도 미룹니다.
    (새로고침하면 화면이 처음부터 다시 떠서 멈춤이 풀려버립니다)
    다만 하염없이 멈춰 있으면 내용이 낡으므로, 지정한 시간이 지나면 스스로 풀립니다. */
-const PAUSE_MAX = 30 * 60 * 1000;
+const PAUSE_MAX = 15 * 60 * 1000;      // 멈춰 두는 시간 (지나면 스스로 풀립니다)
 let paused = false, pauseT = 0, pauseEnd = 0;
 
 function drawPause(on) {
@@ -1135,6 +1179,9 @@ function drawPause(on) {
    시간(초)을 고정하면 글자가 많을수록 빨라져 읽기 어려워집니다.
    길이에 맞춰 시간을 계산하면 어떤 내용이든 같은 속도로 흐릅니다. */
 const TICK_SPEED = 37;                 // 초당 픽셀
+// 집중 노선 칸의 최대 폭. 한 노선이면 대개 이 안에 들어가 제자리에 붙고,
+// 둘 이상이면 넘쳐서 칸 안에서 흐릅니다. 속보 자리는 이 값 덕분에 줄지 않습니다.
+const BFIX_MAX = 600;
 
 function fitSpeed(el) {
   if (!el) return;
@@ -1164,6 +1211,7 @@ function drawLeft() {
 function setPause(on) {
   paused = on;
   drawPause(on);
+  busReadMode();
   clearTimeout(pauseT);
   try { localStorage.setItem("sgPaused", on ? String(Date.now()) : ""); } catch (e) {}
   if (on) {
