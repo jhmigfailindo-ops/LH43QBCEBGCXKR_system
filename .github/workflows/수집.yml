@@ -1,0 +1,69 @@
+# 10분마다 뉴스·날씨·버스를 받아 화면용 파일을 만들고, gh-pages 갈래에 올립니다.
+#
+# 인증키는 저장소에 두지 않습니다. Settings → Secrets → Actions 의
+# DATA_GO_KR_KEY 값을 아래에서 환경변수로 넘겨줍니다.
+name: 수집
+
+on:
+  schedule:
+    # 10분마다. GitHub 사정에 따라 몇 분 늦게 도는 일이 있습니다.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:        # 손으로 지금 돌리기 (Actions 탭의 Run workflow)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 사진 처리에 쓰는 것 설치
+        run: pip install --quiet pillow
+
+      - name: 지난번 화면 파일 가져오기
+        # 사진은 파일 이름이 내용의 지문이라, 이미 받아 둔 것은 다시 받지 않습니다.
+        run: |
+          git fetch origin gh-pages --depth=1 2>/dev/null || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git checkout origin/gh-pages -- 콘텐츠 2>/dev/null || true
+            echo "지난 파일을 가져왔습니다"
+          else
+            echo "첫 실행입니다"
+          fi
+
+      - name: 수집
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+          PYTHONUTF8: "1"
+        run: python 수집기.py
+
+      - name: gh-pages 갈래에 올리기
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          # 화면에 필요한 것만 담습니다.
+          cd 콘텐츠
+          rm -rf .git
+          git init -q
+          git checkout -q -b gh-pages
+          git add -A
+          git -c user.name="signage-bot" \
+              -c user.email="signage-bot@users.noreply.github.com" \
+              commit -q -m "데이터 갱신 $(date -u '+%Y-%m-%d %H:%M') UTC"
+          # 갈래를 통째로 덮어써서 예전 기록이 쌓이지 않게 합니다.
+          # (10분마다 사진까지 쌓이면 저장소가 하루에 수백 MB씩 불어납니다)
+          git push -q --force \
+            "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "올렸습니다"
