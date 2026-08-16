@@ -22,6 +22,7 @@
 """
 
 import json
+import os
 import pathlib
 import re
 import sys
@@ -1261,6 +1262,16 @@ def collect_once(cfg=None):
     cfg = load_conf()
     _frame_cache.clear()
     press = collect_news(cfg)
+
+    # 클라우드(GitHub Actions)에서는 공공데이터포털이 해외라 응답하지 않습니다.
+    # 날씨·버스는 화면이 Cloudflare 중계소에서 직접 받아오므로 여기서는 건너뜁니다.
+    if "--뉴스만" in sys.argv or os.environ.get("NEWS_ONLY"):
+        if press:
+            save(press, None, None, collect_ticker(cfg))
+        else:
+            log("⚠️", "수집된 기사가 없습니다.")
+        return
+
     weather = collect_weather(cfg)
     bus = collect_bus(cfg)
     ticker = collect_ticker(cfg)

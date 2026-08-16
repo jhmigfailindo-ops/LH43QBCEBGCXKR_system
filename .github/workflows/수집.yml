@@ -43,10 +43,13 @@ jobs:
             echo "첫 실행입니다"
           fi
 
-      - name: 수집
+      - name: 수집 (뉴스만)
+        # 날씨·버스는 여기서 받지 않습니다.
+        # 공공데이터포털은 해외에서 응답하지 않아 3분을 기다려도 실패했습니다.
+        # 그쪽은 화면이 Cloudflare 중계소(서울에서 실행)에서 직접 받아옵니다.
         env:
-          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
           PYTHONUTF8: "1"
+          NEWS_ONLY: "1"
         run: python 수집기.py
 
       - name: gh-pages 갈래에 올리기

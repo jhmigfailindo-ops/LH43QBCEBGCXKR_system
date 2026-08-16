@@ -1,0 +1,33 @@
+{
+  // 공공데이터포털은 해외에서 응답하지 않습니다. 이 중계소는 부르는 쪽(사이니지, 한국)과
+  // 가까운 곳에서 실행되므로 국내 속도로 받아옵니다.
+  //
+  // 인증키는 여기 두지 않습니다:
+  //   npx wrangler secret put DATA_GO_KR_KEY
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "signage-data",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-16",
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "vars": {
+    // 지역 설정 — 바꾸려면 여기만 고치고 다시 올리면 됩니다
+    "LOCATION": "서울 마포구 상암동",
+    "GRID_X": "58",
+    "GRID_Y": "127",
+    "LAT": "37.5794",
+    "LON": "126.8895",
+    "MID_LAND": "11B00000",
+    "MID_TA": "11B10101",
+    "AIR_STATION": "마포구",
+    "UV_AREA": "1144000000",
+
+    // 버스 — 기본 정류소와, 맨 위에 고정할 노선
+    "BUS_ARS": "14112,14335",
+    "BUS_PIN": "{\"14112\":[\"9711\"]}"
+  }
+}
