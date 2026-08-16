@@ -468,7 +468,7 @@ def kma(base: str, path: str, params: dict, key: str):
     qs = urllib.parse.urlencode(
         {**params, "dataType": "JSON", "numOfRows": 1000, "pageNo": 1, "serviceKey": key}, safe="%")
     try:
-        data = json.loads(get(f"{base}/{path}?{qs}", timeout=15).read().decode("utf-8"))
+        data = json.loads(get(f"{base}/{path}?{qs}", timeout=30).read().decode("utf-8"))
         head = data["response"]["header"]
         if head["resultCode"] != "00":
             log("⏭", f"{path}: {head['resultMsg']}")
@@ -903,7 +903,7 @@ def refresh_one_route(cfg: dict, no: str, ars: str):
     try:
         qs = urllib.parse.urlencode({"stId": line["stId"], "busRouteId": line["rtId"],
                                      "ord": line["ord"], "serviceKey": key}, safe="%")
-        raw = get(f"{ROUTE_URL}?{qs}", timeout=10).read().decode("utf-8", "ignore")
+        raw = get(f"{ROUTE_URL}?{qs}", timeout=20).read().decode("utf-8", "ignore")
     except Exception as e:
         log("⏭", f"{no}번 조회: {str(e)[:50]}")
         return None
@@ -986,7 +986,7 @@ def collect_bus(cfg: dict):
             continue
         try:
             qs = urllib.parse.urlencode({"arsId": ars, "serviceKey": key}, safe="%")
-            raw = get(f"{BUS_URL}?{qs}", timeout=10).read().decode("utf-8", "ignore")
+            raw = get(f"{BUS_URL}?{qs}", timeout=20).read().decode("utf-8", "ignore")
         except Exception as e:
             log("⏭", f"버스 {ars}: {str(e)[:50]}")
             continue
@@ -1078,7 +1078,7 @@ def collect_air(cfg: dict):
     last = ""
     for _ in range(3):
         try:
-            j = json.loads(get(f"{AIR_URL}?{qs}", timeout=15).read().decode("utf-8"))
+            j = json.loads(get(f"{AIR_URL}?{qs}", timeout=25).read().decode("utf-8"))
             it = j["response"]["body"]["items"][0]
             pm10, pm25 = it.get("pm10Value"), it.get("pm25Value")
             if not pm10 or pm10 == "-":
@@ -1112,7 +1112,7 @@ def collect_uv(cfg: dict):
             qs = urllib.parse.urlencode(
                 {"areaNo": area, "time": base.strftime("%Y%m%d") + f"{h:02d}",
                  "dataType": "JSON", "numOfRows": 10, "pageNo": 1, "serviceKey": key}, safe="%")
-            j = json.loads(get(f"{UV_URL}?{qs}", timeout=12).read().decode("utf-8"))
+            j = json.loads(get(f"{UV_URL}?{qs}", timeout=25).read().decode("utf-8"))
             it = j["response"]["body"]["items"]["item"][0]
             # h0 가 지금, h3·h6… 은 세 시간 간격의 예보입니다.
             # 밤에는 0 이라, 오늘 남은 시간 중 가장 높은 값도 같이 보냅니다.
