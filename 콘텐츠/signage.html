@@ -174,11 +174,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wxnow{flex:0 0 452px;background:#000;color:#FFF;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:4px;padding:0 40px}
 .wxnow .loc{font-size:38px;font-weight:900;letter-spacing:-2px}
-.wxnow .tline{display:flex;flex-direction:column;align-items:center;gap:0}
+/* 기온 옆에 최저·최고를 세로로 세웁니다.
+   상자에 갇혀 따로 읽히던 것을 붙여 "지금 27.6°, 오늘은 24~32°" 로 한 덩어리로 읽히게. */
+.wxnow .tline{display:flex;align-items:center;gap:30px;margin-top:6px}
+.wxnow .mmx{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.wxnow .mmx .hi{font-size:44px;font-weight:900;letter-spacing:-2px;line-height:1}
+.wxnow .mmx .lo{font-size:44px;font-weight:900;letter-spacing:-2px;line-height:1;opacity:.55}
+.wxnow .mmx .bar{width:62px;height:5px;background:#FFF;opacity:.45}
 .wxnow .tmp{font-size:180px;font-weight:900;line-height:.92;letter-spacing:-10px;margin-top:4px}
 .wxnow .sky{font-size:48px;font-weight:900;letter-spacing:-2px}
-.wxnow .mm{font-size:27px;font-weight:700;letter-spacing:-1px;margin-top:12px;
-  border:5px solid #FFF;padding:7px 22px}
+.wxnow .sky{margin-top:8px}
 /* 대기질 — 지금 블록 맨 아래 줄 */
 .wxair{display:flex;gap:12px;margin-top:14px}
 .wxair div{display:flex;align-items:center;gap:9px;background:#FFF;color:#000;
@@ -535,9 +540,15 @@ function weatherInner() {
       <div class="wx">
         <div class="wxnow">
           <div class="loc">${esc(WX.location || "")}</div>
-          <div class="tline"><span class="tmp">${WX.temp ?? "—"}°</span>
-            <span class="sky">${esc(WX.desc || "")}</span></div>
-          <div class="mm mono">최저 ${WX.min ?? "—"}° · 최고 ${WX.max ?? "—"}°</div>
+          <div class="tline">
+            <span class="tmp">${WX.temp ?? "—"}°</span>
+            <div class="mmx mono">
+              <span class="hi">${WX.max ?? "—"}°</span>
+              <span class="bar"></span>
+              <span class="lo">${WX.min ?? "—"}°</span>
+            </div>
+          </div>
+          <div class="sky">${esc(WX.desc || "")}</div>
           ${WX.air ? `<div class="wxair">
             <div><b>미세</b>${esc(WX.air.pm10g)}<i>${WX.air.pm10}</i></div>
             <div><b>초미세</b>${esc(WX.air.pm25g)}<i>${WX.air.pm25}</i></div>
