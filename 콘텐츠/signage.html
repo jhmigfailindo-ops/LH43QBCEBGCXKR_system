@@ -279,7 +279,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bsrow.dead{color:#999}                   /* 운행종료 — 있다는 것만 알면 됩니다 */
 .bsrow.dead .no{opacity:.6}
 .bsrow:last-child{border-bottom:none}
-.bsrow.pin{background:#000;color:#FFF}
+/* 우선노선(pin)은 '맨 위' 라는 자리만으로 충분해서 따로 칠하지 않습니다.
+   자리는 ordered() 가 잡고, 이 이름표는 그 줄이 무엇인지 알아보는 데만 씁니다. */
 .bsrow .no{flex:0 0 168px;font-size:38px;font-weight:900;letter-spacing:-2px;
   white-space:nowrap;overflow:hidden}
 .bsrow .to{flex:1;font-size:21px;font-weight:700;opacity:.55;letter-spacing:-1px;min-width:0;
@@ -288,7 +289,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bsrow .ar{flex:0 0 336px;display:flex;align-items:baseline;justify-content:flex-end;gap:7px}
 .bsrow .ar .w{font-size:34px;font-weight:900;letter-spacing:-2px;white-space:nowrap}
 .bsrow .ar .w.soon{background:#000;color:#FFF;padding:1px 12px}
-.bsrow.pin .ar .w.soon{background:#FFF;color:#000}
 .bsrow .ar .s{font-size:21px;font-weight:900;opacity:.5;letter-spacing:-1px;white-space:nowrap}
 /* 그 다음 차 */
 .bsrow .nx{flex:0 0 190px;text-align:right;font-size:21px;font-weight:700;
@@ -297,7 +297,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   font-size:27px;font-weight:700;color:#999;letter-spacing:-1px;text-align:center}
 /* 리모컨으로 고른 대상 — 왼쪽에 굵은 막대 */
 .bsrow.sel{box-shadow:inset 14px 0 0 #000}
-.bsrow.pin.sel,.bstop.sel{box-shadow:inset 14px 0 0 #FFF}
+.bstop.sel{box-shadow:inset 14px 0 0 #FFF}
 .bstop.sel .nm{padding-left:8px}
 .bsrow.sel .no{padding-left:8px}
 
@@ -315,7 +315,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   background-size:4px 4px}
 .bsrow.boost .ar .w.soon{background:#FFB000;color:#000}
 .bsrow.boost.dead{color:#8a6000}
-.bsrow.boost.sel,.bsrow.pin.boost.sel{box-shadow:inset 14px 0 0 #FFF}
+.bsrow.boost.sel{box-shadow:inset 14px 0 0 #FFF}
 
 /* ══ 공지 ══ */
 .nt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:38px;padding:80px;text-align:center;background:#FFF}
