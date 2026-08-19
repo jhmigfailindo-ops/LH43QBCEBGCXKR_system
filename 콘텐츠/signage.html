@@ -301,6 +301,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bstop.sel .nm{padding-left:8px}
 .bsrow.sel .no{padding-left:8px}
 
+/* 집중조회 중인 노선 — 하단바와 같은 앰버 전광판으로 맞춥니다.
+   흰 막대와 역할이 다릅니다.
+     흰 막대 = 지금 고르고 있는 줄 (아직 아무 일도 일어나지 않았습니다)
+     앰버    = 15초마다 받아오는 중 (실제로 자주 부르고 있습니다)
+   그래서 둘이 겹칠 때도 막대는 흰색 그대로 둡니다. */
+.bsrow.boost{background:#111;color:#FFB000}
+.bsrow.boost .no,.bsrow.boost .ar .w{position:relative;color:#FFB000;
+  text-shadow:0 0 3px rgba(255,176,0,.45)}
+.bsrow.boost .to,.bsrow.boost .ar .s,.bsrow.boost .nx{color:#FFB000;opacity:.6}
+.bsrow.boost .no::after,.bsrow.boost .ar .w::after{content:"";position:absolute;inset:0;
+  pointer-events:none;background-image:radial-gradient(circle,rgba(0,0,0,.6) 1.05px,transparent 1.5px);
+  background-size:4px 4px}
+.bsrow.boost .ar .w.soon{background:#FFB000;color:#000}
+.bsrow.boost.dead{color:#8a6000}
+.bsrow.boost.sel,.bsrow.pin.boost.sel{box-shadow:inset 14px 0 0 #FFF}
+
 /* ══ 공지 ══ */
 .nt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:38px;padding:80px;text-align:center;background:#FFF}
 .nt .k{font-size:25px;font-weight:700;letter-spacing:12px;border:8px solid #000;padding:14px 38px}
@@ -773,11 +789,10 @@ function busHTML() {
 }
 
 /* ══ 집중 갱신 대상 고르기 ══
-   위·아래 버튼으로 무엇을 자주 볼지 고르고, 확인 버튼으로 시작합니다.
-     · 노선 하나만  → 호출 1건  (가장 아낌)
-     · 정류소 하나  → 호출 1건
-     · 전체        → 정류소 수만큼
-   설정의 '우선노선'에 적은 것이 맨 앞에 옵니다. */
+   위·아래 버튼으로 노선을 고르고, 확인 버튼으로 시작합니다.
+   고를 수 있는 것은 '노선 하나' 뿐입니다. 정류소 단위·전체 집중조회는
+   없앴습니다 — 정류소마다 부르면 호출이 정류소 수만큼 늘어나는데,
+   급할 때 보고 싶은 것은 결국 타려는 노선 하나이기 때문입니다. */
 const BUSGI = PRESS.length + 1;
 let bi = 0;
 
@@ -786,9 +801,7 @@ function boostTargets() {
   // 어디를 고르고 있는지 알 수 있기 때문입니다.
   const list = [];
   BUS.forEach(st => ordered(st).forEach(l =>
-    list.push({ k: `route:${l.no}@${st.ars}`, t: `${l.no}번만`, ars: st.ars, no: l.no })));
-  BUS.forEach(st => list.push({ k: `ars:${st.ars}`, t: st.name, ars: st.ars }));
-  if (BUS.length > 1) list.push({ k: "all", t: "정류소 전체" });
+    list.push({ k: `route:${l.no}@${st.ars}`, t: `${l.no}번`, ars: st.ars, no: l.no })));
   return list;
 }
 
@@ -811,15 +824,17 @@ function drawBusSel() {
   const hint = $("bushint");
   if (hint) {
     const left = on ? Math.ceil((boostUntil - Date.now()) / 60000) : 0;
+    // '남음' 까지 붙이면 머리글이 길어져 BUS 글자에 닿습니다
     hint.textContent = on ? `확인 정지 (${left}분)` : "확인 집중조회";
   }
-  document.querySelectorAll("#bsbody .bstop").forEach(el =>
-    el.classList.toggle("sel", cur.k === `ars:${el.dataset.ars}`));
+  const bon = (boostCur && Date.now() < boostUntil) ? boostCur : null;
   let hit = null;
   document.querySelectorAll("#bsbody .bsrow").forEach(el => {
-    const on = cur.no ? (el.dataset.no === cur.no && el.dataset.ars === cur.ars) : false;
-    el.classList.toggle("sel", on);
-    if (on) hit = el;
+    const mine = el.dataset.no === cur.no && el.dataset.ars === cur.ars;
+    el.classList.toggle("sel", mine);
+    el.classList.toggle("boost",
+      !!bon && el.dataset.no === bon.no && el.dataset.ars === bon.ars);
+    if (mine) hit = el;
   });
   // 넘겨 보는 칸이므로, 고른 줄이 화면 밖이면 끌어옵니다.
   //
@@ -843,13 +858,32 @@ function drawBusSel() {
    내용이 바뀔 때 흐름이 튀지 않도록, 틀은 그대로 두고 글자만 바꿉니다. */
 let boostUntil = 0, boostCur = null;
 
+/* ══ 둘째 차가 정류소를 지나가면 스스로 그만 ══
+   집중조회를 켤 때 '둘째 차' 의 차량번호를 적어 둡니다.
+   시간이 지나면 첫차가 떠나 그 차가 첫차가 되고, 그 차마저 지나가면
+   목록에서 사라집니다. 사라진 순간이 '이번에 볼 것은 다 봤다' 는 뜻이라
+   15분을 다 쓰지 않고 그때 그만둡니다.
+   차량번호를 못 받았으면(운행종료 등) 시간 상한만 씁니다. */
+let boostVeh = "";
+
+function vehPair(cur) {
+  const st = BUS.find(x => x.ars === cur.ars);
+  const l = st && (st.lines || []).find(x => x.no === cur.no);
+  return l ? [String(l.v1 || ""), String(l.v2 || "")] : null;
+}
+
+function boostPassed() {
+  if (!boostCur || !boostVeh) return false;
+  const pair = vehPair(boostCur);
+  if (!pair) return false;              // 목록에서 사라졌으면 판단을 미룹니다
+  return !pair.includes(boostVeh);      // 첫차·둘째차 어디에도 없으면 지나간 것입니다
+}
+
 function busTickRows() {
   if (!boostCur) return [];
   const st = BUS.find(x => x.ars === boostCur.ars);
   if (!st) return [];
-  const pick = boostCur.no
-    ? st.lines.filter(l => l.no === boostCur.no)     // 노선 하나만 고른 경우
-    : st.lines.slice(0, 3);                          // 정류소를 고른 경우 앞 세 개
+  const pick = st.lines.filter(l => l.no === boostCur.no);
   return pick.map(l => ({
     no: l.no,
     when: fmtLeft(leftSec(l.sec)) || (l.a && l.a.when) || "정보 없음",
@@ -975,6 +1009,12 @@ async function pullBus(force) {
     rebuildTargets();
     drawBusSel();
     drawBusTick();
+    // 지켜보던 차가 지나갔으면 15분을 다 쓰지 않고 그만둡니다
+    if (boostCur && boostPassed()) {
+      const no = boostCur.no;
+      busStop(true);
+      toast(`${no}번 둘째 차가 지나갔습니다 · 집중조회 종료`, 2600);
+    }
   } catch (e) {}
 }
 
@@ -992,6 +1032,8 @@ const refreshBus = pullBus;
    그동안 남은 시간은 화면에서 1초씩 줄어들고 있습니다.
    노선 집중조회는 이와 별개로 돕니다. 쓰는 창구가 달라 한도도 따로입니다. */
 const BUS_WATCH = 15000;
+const BOOST_EVERY = 15000;              // 집중조회 — 15초마다 받아옵니다
+const BOOST_KEEP = 15 * 60 * 1000;      // 집중조회 — 15분까지만 (상한)
 let busTimer = 0;
 function setBusRead(ms) {
   clearInterval(busTimer);
@@ -1318,7 +1360,8 @@ function restoreBoost() {
     const cur = BT.find(x => x.k === j.k);
     if (!cur || !cur.ars) return;
     boostCur = cur; boostUntil = j.until;
-    setBusRead(cur.no ? 10000 : 30000);
+    boostVeh = j.veh || "";        // 지켜보던 차도 함께 이어받습니다
+    setBusRead(BOOST_EVERY);
     clearTimeout(busCalm);
     busCalm = setTimeout(() => busStop(true), j.until - Date.now());
     drawBusTick();
@@ -1376,34 +1419,39 @@ function busOnce(here) {
 
 /* 집중조회 그만두기 — 평소 주기(5분)로 돌아갑니다 */
 function busStop(quiet) {
-  boostUntil = 0; boostCur = null;
+  boostUntil = 0; boostCur = null; boostVeh = "";
   try { localStorage.removeItem("sgBoost"); } catch (e) {}
   clearTimeout(busCalm);
-  setBusRead(BUS_CALM);
+  // BUS_CALM 은 어디에도 정의돼 있지 않아 여기서 오류가 났습니다.
+  // 그 아래 줄들이 실행되지 않아, 정지해도 하단바 앰버가 그대로 남았습니다.
+  busReadMode();          // 평소 규칙으로 — 멈춰 두고 볼 때만 15초, 아니면 받지 않습니다
   drawBusTick();
   drawBusSel();
   if (!quiet) toast("집중조회 정지", 1800);
 }
 
 async function busBoost() {
-  const cur = BT[bi] || { k: "all", t: "정류소 전체" };
+  const cur = BT[bi];
+  if (!cur) return;
 
-  // 이미 그 대상을 보고 있으면, 한 번 더 누른 것은 "그만" 이라는 뜻입니다.
-  if (boostCur && boostCur.k === cur.k && Date.now() < boostUntil) {
-    return busStop();
-  }
+  // 이미 그 노선을 보고 있으면, 한 번 더 누른 것은 "그만" 이라는 뜻입니다.
+  if (boostCur && boostCur.k === cur.k && Date.now() < boostUntil) return busStop();
 
-  toast(`${cur.t} 자주 받는 중`, 2200);
-  if (cur.ars) {                                   // 전체 조회는 하단바에 띄우지 않습니다
-    boostCur = cur;
-    boostUntil = Date.now() + 30 * 60 * 1000;
-    try { localStorage.setItem("sgBoost", JSON.stringify({ k: cur.k, until: boostUntil })); } catch (e) {}
-    drawBusTick();
-  }
-  setBusRead(cur.no ? 10000 : 30000);              // 노선 하나면 10초, 정류소면 30초
+  boostCur = cur;
+  boostUntil = Date.now() + BOOST_KEEP;
+  const pair = vehPair(cur);
+  boostVeh = pair ? (pair[1] || "") : "";          // 둘째 차를 적어 둡니다
+  try {
+    localStorage.setItem("sgBoost",
+      JSON.stringify({ k: cur.k, until: boostUntil, veh: boostVeh }));
+  } catch (e) {}
+
+  toast(`${cur.no}번 15초마다` + (boostVeh ? " · 둘째 차 지나가면 종료" : " · 15분간"), 2600);
+  setBusRead(BOOST_EVERY);
   clearTimeout(busCalm);
-  busCalm = setTimeout(() => busStop(true), 30 * 60 * 1000);     // 30분 뒤 스스로 그만
-  pullBus();                                       // 기다리지 않고 지금 한 번
+  busCalm = setTimeout(() => busStop(true), BOOST_KEEP);
+  drawBusTick(); drawBusSel();
+  pullBus(true);                                   // 기다리지 않고 지금 한 번
 }
 
 /* ══ 리모컨 ══

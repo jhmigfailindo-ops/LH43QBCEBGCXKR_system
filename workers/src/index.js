@@ -368,6 +368,11 @@ async function getBus(env, arsList, pinMap) {
         sec: +(pick(blk, "traTime1") || 0) || null,
         sec2: +(pick(blk, "traTime2") || 0) || null,
         stId: pick(blk, "stId"), rtId: pick(blk, "busRouteId"), ord: pick(blk, "staOrd"),
+        // 차량번호. 집중조회를 켤 때 '둘째 차' 를 기억해 두고, 그 차가 정류소를
+        // 지나가면 더 볼 이유가 없으므로 화면이 스스로 그만둡니다.
+        // 운행종료면 0 으로 오므로 빈 값으로 바꿔 둡니다.
+        v1: (pick(blk, "vehId1") || "").replace(/^0$/, ""),
+        v2: (pick(blk, "vehId2") || "").replace(/^0$/, ""),
         a: busMsg(pick(blk, "arrmsg1")), b: busMsg(pick(blk, "arrmsg2")),
       });
     }
