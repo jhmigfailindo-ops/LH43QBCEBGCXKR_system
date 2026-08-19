@@ -1032,7 +1032,7 @@ def collect_bus(cfg: dict):
         top = [x.strip() for x in st.get("우선노선", [])]
         lines.sort(key=lambda x: (top.index(x["no"]) if x["no"] in top else len(top), x["sec"]))
         out.append({"ars": ars, "name": st.get("이름", ""), "dir": st.get("방면", ""),
-                    "pin": top, "lines": lines[: int(st.get("표시개수", 10))]})
+                    "pin": top, "lines": lines})   # 자르지 않습니다 — 화면이 넘겨 봅니다
 
     if not out:
         return save_sample() if portal.get("샘플데이터", False) else None

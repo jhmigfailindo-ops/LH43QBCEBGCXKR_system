@@ -253,11 +253,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wkrow .none{flex:1;text-align:right;font-size:24px;font-weight:700;opacity:.4;letter-spacing:-1px}
 
 /* ══ 버스 ══
-   정류장 두 곳 × 노선 열 개 = 스무 줄.
-   본문 1561px 에서 정류장 머리글 두 개(90px)를 빼면 한 줄에 약 69px 이라
-   도착시간과 정거장 수, 다음 차를 한 줄에 나란히 놓았습니다. */
-.bs{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
-.bstop{flex:0 0 90px;background:#000;color:#FFF;display:flex;align-items:center;
+   정류장 한 곳에 노선이 열일곱 개까지 잡히기도 합니다(합쳐 스물여섯 줄).
+   줄을 눌러 담으면 글자가 읽히지 않으므로, 줄마다 최소 높이를 주고
+   넘치는 만큼 넘겨 봅니다. 넘어가는 것은 대개 '운행종료' 라 손해가 적습니다. */
+/* 세로 flex 로 두면, 줄이 글자 때문에 기준높이보다 커질 때 그 늘어난 만큼이
+   scrollHeight 에 반영되지 않아 마지막 줄에 닿지 못했습니다(78px 부족).
+   일반 흐름으로 두면 브라우저가 정확히 셉니다. */
+.bs{flex:1;display:block;position:relative;background:#FFF;min-height:0;
+  overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none}
+.bs::-webkit-scrollbar{display:none}      /* 사이니지에는 손이 닿지 않아 막대를 숨깁니다 */
+/* 넘겨 보는 중에도 어느 정류소인지 알 수 있게 머리글을 붙여 둡니다 */
+.bstop{position:sticky;top:0;z-index:2;
+  height:90px;box-sizing:border-box;background:#000;color:#FFF;display:flex;align-items:center;
   justify-content:space-between;padding:0 30px;gap:16px;border-top:10px solid #000}
 .bs .bstop:first-child{border-top:none}
 .bstop .nm{font-size:36px;font-weight:900;letter-spacing:-2px;white-space:nowrap;
@@ -266,8 +273,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   letter-spacing:-1px;white-space:nowrap}
 .bstop .ars{font-size:23px;font-weight:900;border:4px solid #FFF;padding:4px 12px;flex-shrink:0}
 
-.bsrow{flex:1;display:flex;align-items:center;gap:16px;padding:0 30px;
-  border-bottom:5px solid #000;min-height:0}
+/* 줄 높이는 글자에 맞춰 자연스럽게 두고, 너무 눌리지 않게 하한만 줍니다. */
+.bsrow{min-height:66px;display:flex;align-items:center;gap:16px;padding:0 30px;
+  border-bottom:5px solid #000}
+.bsrow.dead{color:#999}                   /* 운행종료 — 있다는 것만 알면 됩니다 */
+.bsrow.dead .no{opacity:.6}
 .bsrow:last-child{border-bottom:none}
 .bsrow.pin{background:#000;color:#FFF}
 .bsrow .no{flex:0 0 168px;font-size:38px;font-weight:900;letter-spacing:-2px;
@@ -708,6 +718,28 @@ function fmtLeft(sec) {
   return m ? `${m}분 ${pad(x)}초` : `${x}초`;
 }
 
+/* 운행이 끝난 노선인지. 오지 않을 차가 위를 차지하면 안 됩니다.
+   '출발대기' 는 곧 오는 차라 운행종료가 아닙니다. */
+function isDead(l) {
+  return /운행종료|운행\s*종료/.test((l.a && l.a.when) || "");
+}
+
+/* 각 정류소 안의 줄 순서.
+     ① 우선노선 — 설정에 적은 것은 '도착시간과 무관하게' 맨 위입니다.
+        새벽에 운행종료여도 그대로 둡니다. 매일 타는 차라 상태 자체가 알고 싶은 것입니다.
+     ② 운행 중인 노선 — 중계소가 도착이 빠른 순으로 이미 정렬해 둡니다.
+     ③ 운행종료 — 오지 않을 차가 위를 차지하면 안 됩니다. */
+function ordered(st) {
+  const pin = st.pin || [];
+  const ls = (st.lines || []).slice();
+  const key = ls.map((l, i) => i);
+  key.sort((x, y) => {
+    const px = pin.includes(ls[x].no) ? 0 : 1, py = pin.includes(ls[y].no) ? 0 : 1;
+    return (px - py) || (isDead(ls[x]) - isDead(ls[y])) || (x - y);
+  });
+  return key.map((i) => ls[i]);
+}
+
 /* 버스 칸 만들기 — 첫 화면과 30초 갱신이 같은 함수를 씁니다 */
 function busHTML() {
   if (!BUS.length) return `<div class="none">버스 정보를 받는 중입니다</div>`;
@@ -723,8 +755,8 @@ function busHTML() {
             ? "도착정보를 아직 받을 수 없습니다 (서비스 승인 반영 대기)"
             : esc(String(st.error).slice(0, 46)))
         : "지금은 도착 예정 버스가 없습니다"}</div></div>`
-      : st.lines.map(l => `
-      <div class="bsrow${(st.pin || []).includes(l.no) ? " pin" : ""}"
+      : ordered(st).map(l => `
+      <div class="bsrow${(st.pin || []).includes(l.no) ? " pin" : ""}${isDead(l) ? " dead" : ""}"
            data-no="${esc(l.no)}" data-ars="${esc(st.ars)}"
            data-sec="${l.sec ?? ""}" data-sec2="${l.sec2 ?? ""}">
         <div class="no">${esc(l.no)}</div>
@@ -750,12 +782,23 @@ const BUSGI = PRESS.length + 1;
 let bi = 0;
 
 function boostTargets() {
+  // 화면에 보이는 순서 그대로 담습니다. ▲▼ 가 눈에 보이는 줄을 따라 내려가야
+  // 어디를 고르고 있는지 알 수 있기 때문입니다.
   const list = [];
-  BUS.forEach(st => (st.pin || []).forEach(no =>
-    list.push({ k: `route:${no}@${st.ars}`, t: `${no}번만`, ars: st.ars, no })));
+  BUS.forEach(st => ordered(st).forEach(l =>
+    list.push({ k: `route:${l.no}@${st.ars}`, t: `${l.no}번만`, ars: st.ars, no: l.no })));
   BUS.forEach(st => list.push({ k: `ars:${st.ars}`, t: st.name, ars: st.ars }));
   if (BUS.length > 1) list.push({ k: "all", t: "정류소 전체" });
   return list;
+}
+
+/* 도착시간이 바뀌면 노선 순서도 바뀝니다. 그때 고르던 것이 그대로 남아 있도록
+   자리번호가 아니라 이름으로 다시 찾습니다. (이 처리가 없으면 5분마다 선택이 튑니다) */
+function rebuildTargets() {
+  const was = BT[bi] && BT[bi].k;
+  BT = boostTargets();
+  const at = was ? BT.findIndex((x) => x.k === was) : -1;
+  bi = at >= 0 ? at : 0;
 }
 let BT = [];
 
@@ -772,9 +815,26 @@ function drawBusSel() {
   }
   document.querySelectorAll("#bsbody .bstop").forEach(el =>
     el.classList.toggle("sel", cur.k === `ars:${el.dataset.ars}`));
-  document.querySelectorAll("#bsbody .bsrow").forEach(el =>
-    el.classList.toggle("sel",
-      cur.no ? (el.dataset.no === cur.no && el.dataset.ars === cur.ars) : false));
+  let hit = null;
+  document.querySelectorAll("#bsbody .bsrow").forEach(el => {
+    const on = cur.no ? (el.dataset.no === cur.no && el.dataset.ars === cur.ars) : false;
+    el.classList.toggle("sel", on);
+    if (on) hit = el;
+  });
+  // 넘겨 보는 칸이므로, 고른 줄이 화면 밖이면 끌어옵니다.
+  //
+  // 화면 좌표(getBoundingClientRect)로 재면 안 됩니다. fit() 이 무대 전체를
+  // 창에 맞춰 확대·축소하므로 화면 좌표에는 그 배율이 섞여 있는데,
+  // scrollTop·clientHeight 에는 섞여 있지 않아 둘을 견주면 어긋납니다.
+  // offsetTop 계열은 배율이 섞이지 않으므로 그쪽으로만 셉니다.
+  // (.bs 에 position:relative 를 준 덕에 offsetTop 이 이 칸 기준입니다)
+  if (hit) {
+    const box = $("bsbody");
+    const head = 90;                       // 붙어 있는 머리글에 가리지 않게
+    const top = hit.offsetTop, bot = top + hit.offsetHeight;
+    if (top - head < box.scrollTop) box.scrollTop = Math.max(0, top - head);
+    else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
+  }
 }
 
 /* ══ 집중조회 중 하단바 전광판 ══
@@ -910,8 +970,9 @@ async function pullBus(force) {
     busGotAt = Date.now();
     keep("sgBus", BUS); keep("sgBusAt", busGotAt);
     const body = $("bsbody");
-    if (body) body.innerHTML = busHTML();
-    if (!BT.length) BT = boostTargets();
+    const keepTop = body ? body.scrollTop : 0;
+    if (body) { body.innerHTML = busHTML(); body.scrollTop = keepTop; }
+    rebuildTargets();
     drawBusSel();
     drawBusTick();
   } catch (e) {}
@@ -1474,7 +1535,7 @@ function preloadImages() {
 document.body.setAttribute("tabindex", "0");
 preloadImages();
 document.body.classList.add("booting");        // 첫 배치는 소리 없이
-build(); fit(); BT = boostTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
+build(); fit(); rebuildTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
 // 자리를 다 잡은 뒤 전환을 켭니다.
 // (화면이 가려져 있으면 requestAnimationFrame 이 멈춰 버려서, 시간으로 겁니다)
 setTimeout(() => document.body.classList.remove("booting"), 80);
