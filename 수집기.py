@@ -1012,19 +1012,27 @@ def collect_bus(cfg: dict):
             continue
 
         pick = lambda blk, tag: (re.search(f"<{tag}>(.*?)</{tag}>", blk, re.S) or [0, ""])[1].strip()
+        # 안 타는 노선은 아예 뺍니다. 정류소마다 열일곱 개까지 잡혀 화면을 넘기는데,
+        # 실제로 보는 것은 그중 몇 개뿐입니다.
+        hide = [x.strip() for x in st.get("제외노선", [])]
         lines = []
         for blk in re.findall(r"<itemList>(.*?)</itemList>", raw, re.S):
             no = pick(blk, "rtNm")
-            if not no:
+            if not no or no in hide:
                 continue
             try:
                 sec = int(pick(blk, "traTime1") or 9999)
             except ValueError:
                 sec = 9999
+            # 차량번호 — 집중조회에서 '둘째 차가 지나갔는지' 판단하는 데 씁니다.
+            # 운행종료면 0 으로 오므로 빈 값으로 둡니다.
+            v1, v2 = pick(blk, "vehId1"), pick(blk, "vehId2")
+            v1 = "" if v1 == "0" else v1
+            v2 = "" if v2 == "0" else v2
             lines.append({"no": no, "to": pick(blk, "adirection"), "sec": sec,
                           # 아래 셋은 이 노선 하나만 따로 조회할 때 쓰는 열쇠입니다
                           "stId": pick(blk, "stId"), "rtId": pick(blk, "busRouteId"),
-                          "ord": pick(blk, "staOrd"),
+                          "ord": pick(blk, "staOrd"), "v1": v1, "v2": v2,
                           "a": bus_msg(pick(blk, "arrmsg1")),
                           "b": bus_msg(pick(blk, "arrmsg2"))})
 
@@ -1032,7 +1040,7 @@ def collect_bus(cfg: dict):
         top = [x.strip() for x in st.get("우선노선", [])]
         lines.sort(key=lambda x: (top.index(x["no"]) if x["no"] in top else len(top), x["sec"]))
         out.append({"ars": ars, "name": st.get("이름", ""), "dir": st.get("방면", ""),
-                    "pin": top, "lines": lines})   # 자르지 않습니다 — 화면이 넘겨 봅니다
+                    "pin": top, "lines": lines})   # 개수는 자르지 않습니다 — 화면이 넘겨 봅니다
 
     if not out:
         return save_sample() if portal.get("샘플데이터", False) else None

@@ -339,7 +339,7 @@ async function askBus(url, key) {
   return { ok: code === "0", raw, msg };
 }
 
-async function getBus(env, arsList, pinMap) {
+async function getBus(env, arsList, pinMap, hideMap) {
   const key = env.DATA_GO_KR_KEY;
   const stIdMap = JSON.parse(env.BUS_STID || "{}");
   const stops = [];
@@ -356,11 +356,16 @@ async function getBus(env, arsList, pinMap) {
       continue;
     }
     const raw = r.raw;
+    // 안 타는 노선은 아예 빼 둡니다. 정류소마다 열일곱 개까지 잡혀 화면을 넘기는데,
+    // 실제로 보는 것은 그중 몇 개뿐입니다.
+    // 어느 노선을 빼는지는 Secret 에 둡니다 — 노선 번호에 지역 이름이 붙는 경우가
+    // 많아, 목록만 봐도 어느 동네인지 짐작되기 때문입니다.
+    const hide = hideMap[ars] || [];
     const lines = [];
     let stNm = "";
     for (const blk of raw.match(/<itemList>[\s\S]*?<\/itemList>/g) || []) {
       const no = pick(blk, "rtNm");
-      if (!no) continue;
+      if (!no || hide.includes(no)) continue;
       stNm ||= pick(blk, "stNm");
       // sec·sec2 는 화면에서 1초씩 세어 내려가는 데 씁니다 (첫차·둘째차 각각)
       lines.push({
@@ -487,7 +492,8 @@ export default {
           .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 5);
         if (!arsList.length) return json({ error: "ars 를 알려주세요" }, 0);
         const pinMap = JSON.parse(env.BUS_PIN || "{}");
-        res = json(await getBus(env, arsList, pinMap), CACHE_BUS);
+        const hideMap = JSON.parse(env.BUS_HIDE || "{}");
+        res = json(await getBus(env, arsList, pinMap, hideMap), CACHE_BUS);
       } else {
         return json({ error: "없는 주소입니다", 창구: ["/weather", "/bus", "/health"] }, 0);
       }

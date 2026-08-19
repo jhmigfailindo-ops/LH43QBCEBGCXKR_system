@@ -273,8 +273,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   letter-spacing:-1px;white-space:nowrap}
 .bstop .ars{font-size:23px;font-weight:900;border:4px solid #FFF;padding:4px 12px;flex-shrink:0}
 
-/* 줄 높이는 글자에 맞춰 자연스럽게 두고, 너무 눌리지 않게 하한만 줍니다. */
-.bsrow{min-height:66px;display:flex;align-items:center;gap:16px;padding:0 30px;
+/* 줄 높이는 글자에 맞춰 자연스럽게 두고, 너무 눌리지 않게 하한만 줍니다.
+   64px 인 이유: 안 타는 노선을 뺀 스물한 줄이 1524px 이라 1583px 칸에
+   59px 이 남습니다. 66px 이면 17px 만 남습니다.
+   2px 차이는 눈에 띄지 않는데 여유는 세 배가 됩니다. */
+.bsrow{min-height:64px;display:flex;align-items:center;gap:16px;padding:0 30px;
   border-bottom:5px solid #000}
 .bsrow.dead{color:#999}                   /* 운행종료 — 있다는 것만 알면 됩니다 */
 .bsrow.dead .no{opacity:.6}
