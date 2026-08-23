@@ -12,7 +12,7 @@
  * 창구
  *   GET /weather                지금 기온·시간별·주간·대기질·자외선
  *   GET /bus[?ars=…]            정류소별 버스 도착정보 (기본값은 Secret)
- *   GET /holiday[?months=3]     공휴일 (이번 달부터 몇 달)
+ *   GET /holiday[?months=12&back=3]  공휴일 (back 달 전부터 months 달치)
  *   GET /health                 살아 있는지 확인
  */
 
@@ -134,35 +134,42 @@ function uvWord(v) {
 /* ───────────────────────── 공휴일 ─────────────────────────
    달마다 따로 물어봐야 하는 창구라, 이번 달부터 몇 달을 이어서 받습니다.
    한 달이 실패해도 나머지는 그대로 씁니다 — 달력은 공휴일 없이도 성립합니다. */
-async function getHoliday(env, months) {
+async function getHoliday(env, months, back) {
   const key = env.DATA_GO_KR_KEY;
   const now = kst();
   const days = {};
   const failed = [];
 
-  for (let i = 0; i < months; i++) {
+  for (let i = -back; i < months - back; i++) {
     const y = now.getUTCFullYear(), m = now.getUTCMonth() + i;
     const d = new Date(Date.UTC(y + Math.floor(m / 12), m % 12, 1));
     const ym = `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
-    try {
-      const q = `solYear=${d.getUTCFullYear()}&solMonth=${p2(d.getUTCMonth() + 1)}&numOfRows=50`;
-      const res = await fetch(`${HOLIDAY_URL}?${q}&serviceKey=${key}`,
-        { signal: AbortSignal.timeout(12000) });
-      const raw = await res.text();
-      // 응답이 XML 이라 항목을 짝지어 읽습니다 (이름과 날짜가 같은 순서로 옵니다)
-      const items = raw.match(/<item>[\s\S]*?<\/item>/g) || [];
-      for (const it of items) {
-        const date = pick(it, "locdate"), name = pick(it, "dateName");
-        if (date && date.length === 8) {
-          days[`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`] = name || "공휴일";
+    // 이 API 는 연속으로 여러 번 부르면 몇 개가 그냥 떨어집니다
+    // (열두 달을 부르면 두세 달이 실패하고, 실패하는 달은 매번 달라집니다).
+    // 달마다 세 번까지 다시 물어봅니다.
+    let got = false;
+    for (let t = 0; t < 3 && !got; t++) {
+      try {
+        const q = `solYear=${d.getUTCFullYear()}&solMonth=${p2(d.getUTCMonth() + 1)}&numOfRows=50`;
+        const res = await fetch(`${HOLIDAY_URL}?${q}&serviceKey=${key}`,
+          { signal: AbortSignal.timeout(12000) });
+        const raw = await res.text();
+        if (!raw.includes("<resultCode>00")) throw new Error("no data");
+        // 응답이 XML 이라 항목을 짝지어 읽습니다 (이름과 날짜가 같은 순서로 옵니다)
+        const items = raw.match(/<item>[\s\S]*?<\/item>/g) || [];
+        for (const it of items) {
+          const date = pick(it, "locdate"), name = pick(it, "dateName");
+          if (date && date.length === 8) {
+            days[`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`] = name || "공휴일";
+          }
         }
-      }
-    } catch (e) {
-      failed.push(ym);
+        got = true;      // 공휴일이 없는 달도 정상 응답이면 성공입니다
+      } catch (e) { /* 다시 물어봅니다 */ }
     }
+    if (!got) failed.push(ym);
   }
   const at = kst();
-  return { days, months,
+  return { days, months, back,
            failed: failed.length ? failed : undefined,
            at: `${at.getUTCFullYear()}-${p2(at.getUTCMonth() + 1)}-${p2(at.getUTCDate())} ` +
                `${p2(at.getUTCHours())}:${p2(at.getUTCMinutes())}` };
@@ -545,8 +552,15 @@ export default {
         const hideMap = JSON.parse(env.BUS_HIDE || "{}");
         res = json(await getBus(env, arsList, pinMap, hideMap), CACHE_BUS);
       } else if (url.pathname === "/holiday") {
-        const months = Math.min(12, Math.max(1, +(url.searchParams.get("months") || 3)));
-        res = json(await getHoliday(env, months), CACHE_HOLIDAY);
+        // 달력에서 앞뒤로 넘겨 볼 수 있어야 하므로 지난 달도 함께 받습니다.
+        // 없는 달은 점도 이름도 안 나오는데, 자료가 없는 것과 공휴일이 없는 것을
+        // 화면에서 가릴 수 없어서 혼란스럽습니다.
+        const months = Math.min(24, Math.max(1, +(url.searchParams.get("months") || 3)));
+        const back = Math.min(months - 1, Math.max(0, +(url.searchParams.get("back") || 0)));
+        const hol = await getHoliday(env, months, back);
+        // 한 달이라도 못 받았으면 6시간을 캐시하지 않습니다.
+        // 빠진 달이 담긴 응답이 굳으면, 그 달을 넘겨 볼 때 계속 '공휴일 없음' 이 나옵니다.
+        res = json(hol, hol.failed ? 300 : CACHE_HOLIDAY);
       } else {
         return json({ error: "없는 주소입니다",
                       창구: ["/weather", "/bus", "/holiday", "/health"] }, 0);
