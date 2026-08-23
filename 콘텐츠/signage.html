@@ -320,16 +320,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bsrow.boost.dead{color:#8a6000}
 .bsrow.boost.sel{box-shadow:inset 14px 0 0 #FFF}
 
-/* ══ 아트 ══
-   그림을 그리는 카드가 아니라 남의 홈페이지를 그대로 띄우는 카드입니다.
-   머리글을 두지 않습니다 — 그 사이트가 자기 로고를 이미 갖고 있어서
-   우리 타이틀을 얹으면 이름이 두 번 나오고, 칸도 146px 을 잃습니다.
-   하단바(속보)는 다른 카드와 똑같이 남깁니다. */
-.art{flex:1;background:#FFF;min-height:0;position:relative;overflow:hidden}
-.art iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;
-  /* 리모컨이 프레임 안으로 먹히지 않게 합니다 (기사 원문에서 겪었던 문제) */
-  pointer-events:none}
-
 /* ══ 달력 ══
    업무와 무관한 순수 달력입니다. 달·요일·날짜·공휴일만 있습니다.
    세로선을 두지 않아 주 단위로 끊어 읽히고, 주말·공휴일에 옅은 바탕을 깝니다. */
@@ -604,8 +594,7 @@ const MARQUEE = `<span class="seg">` +
 const GH = 1803;                         // 화면보다 45px 짧게 → 다음 언론사가 살짝 보임
 let BUS = recall("sgBus") || D.bus || [];
 const _bgot = recall("sgBusAt");
-const ART_URL = "https://kimjungyoun.com/";   // 아트 카드에 띄우는 주소
-const EXTRA = 4;                         // 뉴스 뒤 카드 수 (날씨 · 버스 · 달력 · 아트)
+const EXTRA = 3;                         // 뉴스 뒤 카드 수 (날씨 · 버스 · 달력)
 const N = PRESS.length + EXTRA;
 
 /* ══ 상태 ══ */
@@ -709,16 +698,8 @@ function build() {
       <div class="cl" id="calbody">${calHTML()}</div>${foot()}
     </div>`;
 
-  /* 아트 — iframe 은 한 번만 만들고 그대로 둡니다.
-     카드가 안 보이는 동안에도 그 사이트의 그림이 계속 올라가므로,
-     돌아올 때마다 다른 작품이 떠 있습니다. 다시 띄우면 늘 같은 장면부터 시작합니다. */
-  const artCard = `
-    <div class="group" data-g="${PRESS.length + 3}">
-      <div class="art"><iframe id="artframe" src="${ART_URL}"
-        scrolling="no" referrerpolicy="no-referrer" title="ART"></iframe></div>${foot()}
-    </div>`;
 
-  $("track").innerHTML = news + wxToday + busCard + nt + artCard;
+  $("track").innerHTML = news + wxToday + busCard + nt;
 }
 
 /* ══════════════════ 달력 ══════════════════
@@ -791,7 +772,6 @@ function calHTML() {
 }
 
 const CALGI = PRESS.length + 2;
-const ARTGI = PRESS.length + 3;
 
 function drawCal() {
   const body = $("calbody");
