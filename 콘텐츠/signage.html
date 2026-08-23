@@ -335,8 +335,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   background-image:linear-gradient(var(--mesh) 2px,transparent 2px),
                    linear-gradient(90deg,var(--mesh) 2px,transparent 2px);
   background-size:var(--mesh-gap) var(--mesh-gap)}
+/* 위아래 패딩이 6/10 이면 글자가 2.5px 올라가 보입니다.
+   글꼴(-apple-system)의 기준선이 76px 칸의 66.5px 에 있어서 잉크가 위 4.8px·아래 3.3px 에
+   걸리는데, 패딩까지 아래가 두꺼우면 그 차이가 눈에 띕니다.
+   7/9 로 두면 위 11.8px · 아래 12.3px 로 맞습니다 (박스 높이 102px 는 그대로). */
 .clplate{position:absolute;left:26px;top:22px;background:#FFF;border:5px solid #000;
-  padding:6px 22px 10px}
+  padding:7px 22px 9px}
 .clplate b{font-size:76px;font-weight:900;letter-spacing:-4px;line-height:1;display:block}
 .clyr{position:absolute;right:0;bottom:0;background:#000;color:#FFF;padding:9px 22px;
   font-size:23px;font-weight:900;letter-spacing:2px}
