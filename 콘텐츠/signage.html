@@ -325,12 +325,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
    세로선을 두지 않아 주 단위로 끊어 읽히고, 주말·공휴일에 옅은 바탕을 깝니다. */
 .cl{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
 
-/* 표제 — 모눈 위에 흰 판을 얹습니다. 아래 달력 격자와 결이 이어집니다. */
+/* 표제 — 모눈은 두지 않습니다. 아래 달력 격자와 밀도가 비슷해 두 격자가 겹쳐 읽혔습니다. */
 .clmh{height:150px;flex:0 0 auto;position:relative;overflow:hidden;
-  border-bottom:8px solid #000;background-color:#FFF;
-  background-image:linear-gradient(#BDBDBD 2px,transparent 2px),
-                   linear-gradient(90deg,#BDBDBD 2px,transparent 2px);
-  background-size:24px 24px}
+  border-bottom:8px solid #000;background:#FFF}
 .clplate{position:absolute;left:26px;top:22px;background:#FFF;border:5px solid #000;
   padding:6px 22px 10px}
 .clplate b{font-size:76px;font-weight:900;letter-spacing:-4px;line-height:1;display:block}
@@ -344,7 +341,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 
 .clgrid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
 .clcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
-  border-bottom:5px solid #000}
+  border-bottom:5px solid #000;border-right:5px solid #000}
+.clcell:nth-child(7n){border-right:none}
+/* 이 달이 아닌 칸은 세로선을 없앱니다 — 격자가 이 달의 모양대로만 남습니다.
+   1일을 여는 한 줄은 남겨야 첫날의 옆구리가 트이지 않습니다. */
+.clcell.off,.clcell.next{border-right:none}
+.clcell.off.keep{border-right:5px solid #000}
 .clcell .n{font-size:52px;font-weight:900;letter-spacing:-2px}
 /* 공휴일 표시 — 주말과 바탕이 같아서 점으로 가릅니다 */
 .clcell .hd{width:15px;height:15px;background:#000;border-radius:50%}
@@ -356,12 +358,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .clcell.today{background:#000}
 .clcell.today .n{color:#FFF}
 .clcell.today .hd{background:#FFF}
+/* 뒤쪽으로 넘어간 다음 달 날짜.
+   지난 날(#C4C4C4)보다 연하게 두고, 주말 옅은 바탕을 이 달 경계에서 끊습니다.
+   표 안이지만 이 달은 아니라는 뜻입니다. */
+.clcell.next{background:transparent}
+.clcell.next .n{color:#DCDCDC}
+.clcell.next .hd{background:#DCDCDC}
 
 /* 공휴일 이름은 칸에 넣지 않고 아래에 모읍니다 — 칸이 숫자만으로 깔끔해집니다 */
 .clhol{height:118px;flex:0 0 auto;border-top:8px solid #000;display:flex;align-items:center;
   justify-content:center;gap:36px;padding:0 30px;overflow:hidden}
 .clhol span{font-size:29px;font-weight:900;letter-spacing:-1px;white-space:nowrap}
 .clhol span em{font-style:normal;font-weight:700;color:#777;margin-right:9px}
+/* 넘어온 달의 공휴일 — 격자의 회색 점과 같은 계열로 */
+.clhol span.nx{color:#C9C9C9}
+.clhol span.nx em{color:#DCDCDC}
 .clhol .none{font-size:27px;font-weight:700;color:#999;letter-spacing:-1px}
 
 /* ══ ② 읽기 ══ */
@@ -703,7 +714,8 @@ function calHTML() {
   const days = new Date(y, m + 1, 0).getDate();
 
   const list = [];
-  for (let i = 0; i < first; i++) list.push(null);
+  // 이 달 앞의 빈 칸. 1일 바로 앞 한 칸만 세로선을 남깁니다(첫날의 왼쪽 벽).
+  for (let i = 0; i < first; i++) list.push({ off: true, keep: i === first - 1 });
   for (let d = 1; d <= days; d++) {
     const key = `${y}-${pad(m + 1)}-${pad(d)}`;
     const dow = (first + d - 1) % 7;
@@ -711,20 +723,26 @@ function calHTML() {
                 we: dow === 0 || dow === 6 || !!HOL[key],
                 today: key === today, past: key < today });
   }
-  while (list.length % 7) list.push(null);
+  // 뒤에 남는 칸은 다음 달 날짜로 채웁니다. 월말에 다음 주를 미리 볼 수 있습니다.
+  let nd = 1;
+  while (list.length % 7) {
+    const nx = new Date(y, m + 1, nd);
+    const key = `${nx.getFullYear()}-${pad(nx.getMonth() + 1)}-${pad(nx.getDate())}`;
+    list.push({ d: nd, key, hol: HOL[key] || "", next: true });
+    nd++;
+  }
 
   const cells = list.map((c) => {
-    if (!c) return `<div class="clcell"></div>`;
-    const k = ["clcell", c.we ? "we" : "", c.past ? "past" : "", c.today ? "today" : ""]
-      .filter(Boolean).join(" ");
+    if (c.off) return `<div class="clcell off${c.keep ? " keep" : ""}"></div>`;
+    const k = ["clcell", c.we ? "we" : "", c.past ? "past" : "",
+               c.today ? "today" : "", c.next ? "next" : ""].filter(Boolean).join(" ");
     return `<div class="${k}"><div class="n">${c.d}</div>` +
            (c.hol ? `<div class="hd"></div>` : "") + `</div>`;
   }).join("");
 
-  // 이 달의 공휴일만 아래에 모읍니다
-  const mine = Object.entries(HOL)
-    .filter(([k]) => k.startsWith(`${y}-${pad(m + 1)}`))
-    .sort(([a], [b]) => a < b ? -1 : 1);
+  // 하단은 격자에 점이 찍힌 날을 그대로 모읍니다.
+  // '점에는 반드시 이름이 있다' 를 지키려면 넘어온 달 것도 함께 적어야 합니다.
+  const marks = list.filter((c) => c.hol);
 
   return `
     <div class="clmh">
@@ -734,9 +752,10 @@ function calHTML() {
     <div class="cldow">${CAL_DOW.map((x, i) =>
       `<div class="${i === 0 || i === 6 ? "we" : ""}">${x}</div>`).join("")}</div>
     <div class="clgrid">${cells}</div>
-    <div class="clhol">${mine.length
-      ? mine.map(([k, v]) =>
-          `<span><em>${+k.slice(5, 7)}.${+k.slice(8, 10)}</em>${esc(v)}</span>`).join("")
+    <div class="clhol">${marks.length
+      ? marks.map((c) =>
+          `<span class="${c.next ? "nx" : ""}">` +
+          `<em>${+c.key.slice(5, 7)}.${+c.key.slice(8, 10)}</em>${esc(c.hol)}</span>`).join("")
       : `<div class="none">이 달에는 공휴일이 없습니다</div>`}</div>`;
 }
 
