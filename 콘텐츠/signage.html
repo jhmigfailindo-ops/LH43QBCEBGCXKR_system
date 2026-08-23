@@ -185,16 +185,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wxnow .sky{font-size:48px;font-weight:900;letter-spacing:-2px}
 .wxnow .sky{margin-top:8px}
 /* 대기질 — 지금 블록 맨 아래 줄 */
-.wxair{display:flex;gap:12px;margin-top:14px}
-.wxair div{display:flex;align-items:center;gap:9px;background:#FFF;color:#000;
+/* 가운데 정렬은 '미세·초미세 박스 두 개' 만 기준으로 합니다.
+   측정소 이름을 같이 세면 그 폭 때문에 박스가 왼쪽으로 밀립니다. → 흐름에서 빼고 옆에 걸어 둡니다. */
+.wxair{display:flex;justify-content:center;margin-top:14px}
+.wxair .pair{position:relative;display:flex;gap:12px;align-items:center}
+/* '.wxair div' 로 두면 묶음(.pair) 까지 흰 박스가 되어 두 박스가 한 덩어리로 보입니다.
+   묶음 안의 직계 자식만 박스로 만듭니다. */
+.wxair .pair > div{display:flex;align-items:center;gap:9px;background:#FFF;color:#000;
   padding:7px 18px;font-size:25px;font-weight:900;letter-spacing:-1px}
 .wxair b{font-size:21px;font-weight:700;opacity:.55}
 .smp{background:#000;color:#FFF;font-size:18px;font-weight:900;letter-spacing:0;
   padding:4px 10px;align-self:center}
-.wxair .smp{background:#FFF;color:#000;border:3px solid #000}
+.wxair .pair > .smp{background:#FFF;color:#000;border:3px solid #000}
 .bstop .smp{background:#FFF;color:#000}
 .wxair i{font-size:21px;font-weight:900;font-style:normal;opacity:.5}
-.wxair .stn{background:none;color:#FFF;opacity:.45;font-size:19px;font-weight:700;padding:7px 4px}
+.wxair .pair > .stn{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:14px;
+  background:none;color:#FFF;opacity:.45;font-size:19px;font-weight:700;padding:0;
+  white-space:nowrap}
+.wxair .pair > .smp{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:14px}
 
 .wxkpi{flex:0 0 168px;display:grid;grid-template-columns:repeat(5,1fr);border-top:13px solid #000}
 .wxkpi>div{border-right:8px solid #000;display:flex;flex-direction:column;
@@ -243,11 +251,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   border-bottom:6px solid #000;min-height:0}
 .wkrow:last-child{border-bottom:none}
 .wkrow.sun{background:#000;color:#FFF}
-/* 오늘 — 달력 카드와 같은 어휘(검정 칸)로 맞춥니다. 일요일보다 오늘이 앞섭니다. */
-.wkrow.today{background:#000;color:#FFF}
-.wkrow.today .wd b::after{content:" 오늘";font-size:20px;font-weight:700;opacity:.6;
-  letter-spacing:0}
-.wkrow.today .wd{flex:0 0 200px}
+/* 오늘 — 왼쪽에 얇은 막대 하나만. 첫 줄이 곧 오늘이지만 표가 하나도 없으면
+   '오늘부터인가 내일부터인가' 를 한 번 생각하게 됩니다. 칸 폭은 건드리지 않습니다. */
+.wkrow.today{box-shadow:inset 7px 0 0 #BBB}
+.wkrow.today.sun{box-shadow:inset 7px 0 0 #888}
 .wkrow .wd{flex:0 0 132px;display:flex;align-items:baseline;gap:10px}
 .wkrow .wd b{font-size:38px;font-weight:900;letter-spacing:-2px}
 .wkrow .wd em{font-size:22px;font-weight:700;font-style:normal;opacity:.6}
@@ -648,10 +655,12 @@ function weatherInner() {
           </div>
           <div class="sky">${esc(WX.desc || "")}</div>
           ${WX.air ? `<div class="wxair">
-            <div><b>미세</b>${esc(WX.air.pm10g)}<i>${WX.air.pm10}</i></div>
-            <div><b>초미세</b>${esc(WX.air.pm25g)}<i>${WX.air.pm25}</i></div>
-            ${WX.air.st ? `<div class="stn">${esc(WX.air.st)} 측정소</div>` : ""}
-            ${WX.air.sample ? `<div class="smp">샘플</div>` : ""}
+            <div class="pair">
+              <div><b>미세</b>${esc(WX.air.pm10g)}<i>${WX.air.pm10}</i></div>
+              <div><b>초미세</b>${esc(WX.air.pm25g)}<i>${WX.air.pm25}</i></div>
+              ${WX.air.st ? `<div class="stn">${esc(WX.air.st)} 측정소</div>` : ""}
+              ${WX.air.sample ? `<div class="smp">샘플</div>` : ""}
+            </div>
           </div>` : ""}
         </div>
         <div class="wxkpi">
@@ -671,7 +680,7 @@ function weatherInner() {
         <div class="wk">
           <div class="cap mono"><span>주간예보</span><span>오전 · 오후 · 최저/최고</span></div>
           ${(WX.week || []).map(d => `
-            <div class="wkrow${d.today ? " today" : d.sun ? " sun" : ""}">
+            <div class="wkrow${d.today ? " today" : ""}${d.sun ? " sun" : ""}">
               <div class="wd"><b>${esc(d.w || "")}</b><em class="mono">${esc(d.d || "")}</em></div>
               ${d.max == null ? `<div class="none">예보 준비 중</div>` : `
                 <div class="half"><b>오전</b>${d.amOK === false
