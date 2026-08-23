@@ -207,7 +207,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wxkpi u{font-size:19px;font-weight:700;text-decoration:none;opacity:.5;letter-spacing:-1px;
   margin-top:-3px;white-space:nowrap}
 
-.wxhr{flex:0 0 400px;display:flex;flex-direction:column;border-top:13px solid #000;min-height:0}
+/* 400 → 326px. 주간이 여섯 줄에서 일곱 줄(오늘 포함)로 늘어 74px 이 필요했고,
+   이 칸은 글자 162px 에 여백이 159px 이라 여백만으로 낼 수 있었습니다.
+   글자 크기는 그대로고 칸 사이 간격만 40px → 21px 로 좁아집니다. */
+.wxhr{flex:0 0 326px;display:flex;flex-direction:column;border-top:13px solid #000;min-height:0}
 /* 지금 어느 시간대를 보고 있는지 탭으로 보여줍니다 */
 .htabs{flex:0 0 66px;display:grid;background:#000}
 .htabs .tb{display:flex;align-items:center;justify-content:center;gap:8px;
@@ -240,6 +243,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
   border-bottom:6px solid #000;min-height:0}
 .wkrow:last-child{border-bottom:none}
 .wkrow.sun{background:#000;color:#FFF}
+/* 오늘 — 달력 카드와 같은 어휘(검정 칸)로 맞춥니다. 일요일보다 오늘이 앞섭니다. */
+.wkrow.today{background:#000;color:#FFF}
+.wkrow.today .wd b::after{content:" 오늘";font-size:20px;font-weight:700;opacity:.6;
+  letter-spacing:0}
+.wkrow.today .wd{flex:0 0 200px}
 .wkrow .wd{flex:0 0 132px;display:flex;align-items:baseline;gap:10px}
 .wkrow .wd b{font-size:38px;font-weight:900;letter-spacing:-2px}
 .wkrow .wd em{font-size:22px;font-weight:700;font-style:normal;opacity:.6}
@@ -251,6 +259,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .wkrow .wt span{font-size:34px;font-weight:900;letter-spacing:-2px;opacity:.5}
 .wkrow .wt em{font-size:44px;font-weight:900;letter-spacing:-2px;font-style:normal}
 .wkrow .none{flex:1;text-align:right;font-size:24px;font-weight:700;opacity:.4;letter-spacing:-1px}
+/* 오늘의 오전이 이미 지나 자료가 없을 때. 오후 값으로 채우면 거짓이 됩니다. */
+.wkrow .half .gone{font-size:24px;font-weight:700;opacity:.4;letter-spacing:-1px}
 
 /* ══ 버스 ══
    정류장 한 곳에 노선이 열일곱 개까지 잡히기도 합니다(합쳐 스물여섯 줄).
@@ -661,11 +671,15 @@ function weatherInner() {
         <div class="wk">
           <div class="cap mono"><span>주간예보</span><span>오전 · 오후 · 최저/최고</span></div>
           ${(WX.week || []).map(d => `
-            <div class="wkrow${d.sun ? " sun" : ""}">
+            <div class="wkrow${d.today ? " today" : d.sun ? " sun" : ""}">
               <div class="wd"><b>${esc(d.w || "")}</b><em class="mono">${esc(d.d || "")}</em></div>
               ${d.max == null ? `<div class="none">예보 준비 중</div>` : `
-                <div class="half"><b>오전</b><span>${esc(d.amS || "")}</span><i>${d.amP}%</i></div>
-                <div class="half"><b>오후</b><span>${esc(d.pmS || "")}</span><i>${d.pmP}%</i></div>
+                <div class="half"><b>오전</b>${d.amOK === false
+                  ? `<span class="gone">지남</span>`
+                  : `<span>${esc(d.amS || "")}</span><i>${d.amP}%</i>`}</div>
+                <div class="half"><b>오후</b>${d.pmOK === false
+                  ? `<span class="gone">지남</span>`
+                  : `<span>${esc(d.pmS || "")}</span><i>${d.pmP}%</i>`}</div>
                 <div class="wt"><span>${d.min}°</span><em>${d.max}°</em></div>`}
             </div>`).join("")}
         </div>

@@ -238,7 +238,7 @@ async function getWeather(env) {
   tmn ??= Math.min(...pool);
   tmx ??= Math.max(...pool);
 
-  // ④ 주간 — 내일부터 6일. 앞 이틀은 단기예보, 나머지는 중기예보
+  // ④ 주간 — 오늘부터 7일. 앞 며칠은 단기예보, 나머지는 중기예보
   const dayBox = (d8) => {
     const lo = [], hi = [], am = [], pm = [];
     for (const k of keys) {
@@ -249,7 +249,10 @@ async function getWeather(env) {
       if (s.TMN) lo.push(+s.TMN);
       if (s.TMX) hi.push(+s.TMX);
     }
-    if (!lo.length || !hi.length) return null;
+    // 오늘은 최저·최고가 나오는 시각(06시·15시)이 이미 지났을 수 있습니다.
+    // 그때는 위에서 구한 오늘 값(tmn·tmx)으로 채웁니다.
+    const isToday = d8 === today;
+    if ((!lo.length || !hi.length) && !isToday) return null;
     const pick = (box) => {
       if (!box.length) return ["", 0, ""];
       const counts = {};
@@ -257,19 +260,24 @@ async function getWeather(env) {
       const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
       return [top, Math.max(...box.map((x) => x[1])), box.find((x) => x[0] === top)[2]];
     };
-    const [ai, ap, aw] = pick(am.length ? am : pm);
-    const [pi, pp, pw] = pick(pm.length ? pm : am);
-    return { amI: ai, amP: ap, amS: aw, pmI: pi, pmP: pp, pmS: pw,
-             min: Math.round(Math.min(...lo)), max: Math.round(Math.max(...hi)) };
+    // 오늘은 오전이 이미 지나 자료가 없을 수 있습니다. 없는데 오후 값으로 채우면
+    // 지나간 오전에 오후 날씨를 적는 거짓이 됩니다 → 없으면 없다고 알립니다.
+    const [ai, ap, aw] = pick(am);
+    const [pi, pp, pw] = pick(pm);
+    return { amI: ai, amP: ap, amS: aw, amOK: am.length > 0,
+             pmI: pi, pmP: pp, pmS: pw, pmOK: pm.length > 0,
+             min: lo.length ? Math.round(Math.min(...lo)) : tmn,
+             max: hi.length ? Math.round(Math.max(...hi)) : tmx };
   };
 
   const week = [];
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 0; i <= 6; i++) {                 // 0 = 오늘
     const d = kst(i * 1440);
     week.push({
       d: `${d.getUTCMonth() + 1}.${d.getUTCDate()}.`, w: DOW[d.getUTCDay()],
-      sun: d.getUTCDay() === 0,
-      ...(dayBox(ymd(d)) || { amI: "", amP: 0, amS: "", pmI: "", pmP: 0, pmS: "", min: null, max: null }),
+      sun: d.getUTCDay() === 0, today: i === 0,
+      ...(dayBox(ymd(d)) || { amI: "", amP: 0, amS: "", amOK: false,
+                              pmI: "", pmP: 0, pmS: "", pmOK: false, min: null, max: null }),
     });
   }
 
@@ -292,8 +300,8 @@ async function getWeather(env) {
         const T = (await callJson(`${MIDFCST}/getMidTa`,
           { regId: env.MID_TA || "11B10101", tmFc }, key, 12000))[0];
         const baseDay = Date.UTC(+tmFc.slice(0, 4), +tmFc.slice(4, 6) - 1, +tmFc.slice(6, 8));
-        for (let i = 1; i <= 6; i++) {
-          const x = week[i - 1];
+        for (let i = 0; i <= 6; i++) {
+          const x = week[i];
           if (x.max !== null) continue;
           const tgt = kst(i * 1440);
           const n = Math.round((Date.UTC(tgt.getUTCFullYear(), tgt.getUTCMonth(), tgt.getUTCDate()) - baseDay) / 864e5);
@@ -303,6 +311,7 @@ async function getWeather(env) {
           const word = (s) => s.includes("눈") ? "눈" : s.includes("소나기") ? "소나기"
             : s.includes("비") ? "비" : s.includes("흐") ? "흐림" : s.includes("구름") ? "구름" : "맑음";
           x.amS = word(am); x.pmS = word(pm);
+          x.amOK = true; x.pmOK = true;
           x.amP = +(L[`rnSt${n}Am`] ?? L[`rnSt${n}`] ?? 0);
           x.pmP = +(L[`rnSt${n}Pm`] ?? L[`rnSt${n}`] ?? 0);
           x.min = +T[`taMin${n}`]; x.max = +T[`taMax${n}`];
