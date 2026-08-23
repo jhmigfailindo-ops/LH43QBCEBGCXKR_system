@@ -12,12 +12,15 @@
  * 창구
  *   GET /weather                지금 기온·시간별·주간·대기질·자외선
  *   GET /bus[?ars=…]            정류소별 버스 도착정보 (기본값은 Secret)
+ *   GET /holiday[?months=3]     공휴일 (이번 달부터 몇 달)
  *   GET /health                 살아 있는지 확인
  */
 
 const VILAGE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
 const MIDFCST = "https://apis.data.go.kr/1360000/MidFcstInfoService";
 const UV_URL = "https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5";
+// 한국천문연구원 특일 정보 — 공휴일. 대체공휴일·임시공휴일까지 여기서 옵니다.
+const HOLIDAY_URL = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo";
 const AIR_URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty";
 // 서울시는 서비스마다 창구가 다릅니다. 어느 쪽이 먼저 열리든 쓰도록 둘 다 준비합니다.
 //   ① 정류소정보조회  — ARS 번호(표지판 5자리)로 그 정류소의 전체 노선
@@ -28,6 +31,7 @@ const BUS_URL2 = "http://ws.bus.go.kr/api/rest/arrive/getLowArrInfoByStId";
 // 같은 값을 여러 번 받아오지 않도록 잠깐 담아 둡니다 (공공데이터 하루 한도를 아끼려고)
 const CACHE_WEATHER = 600;   // 10분
 const CACHE_BUS = 8;         // 8초 — 화면이 10초마다 물어보므로 대개 새 값이 옵니다
+const CACHE_HOLIDAY = 21600; // 6시간 — 공휴일은 거의 바뀌지 않지만, 임시공휴일이 생기면 그날 안에 반영됩니다
 
 const SKY = { "1": ["맑음", "☀️"], "3": ["구름많음", "⛅"], "4": ["흐림", "☁️"] };
 // 강수형태. 5·6·7 은 "지금 이 순간" 관측값(초단기실황)에만 나오는 값입니다.
@@ -125,6 +129,43 @@ function uvWord(v) {
   if (v >= 6) return "높음";
   if (v >= 3) return "보통";
   return "낮음";
+}
+
+/* ───────────────────────── 공휴일 ─────────────────────────
+   달마다 따로 물어봐야 하는 창구라, 이번 달부터 몇 달을 이어서 받습니다.
+   한 달이 실패해도 나머지는 그대로 씁니다 — 달력은 공휴일 없이도 성립합니다. */
+async function getHoliday(env, months) {
+  const key = env.DATA_GO_KR_KEY;
+  const now = kst();
+  const days = {};
+  const failed = [];
+
+  for (let i = 0; i < months; i++) {
+    const y = now.getUTCFullYear(), m = now.getUTCMonth() + i;
+    const d = new Date(Date.UTC(y + Math.floor(m / 12), m % 12, 1));
+    const ym = `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}`;
+    try {
+      const q = `solYear=${d.getUTCFullYear()}&solMonth=${p2(d.getUTCMonth() + 1)}&numOfRows=50`;
+      const res = await fetch(`${HOLIDAY_URL}?${q}&serviceKey=${key}`,
+        { signal: AbortSignal.timeout(12000) });
+      const raw = await res.text();
+      // 응답이 XML 이라 항목을 짝지어 읽습니다 (이름과 날짜가 같은 순서로 옵니다)
+      const items = raw.match(/<item>[\s\S]*?<\/item>/g) || [];
+      for (const it of items) {
+        const date = pick(it, "locdate"), name = pick(it, "dateName");
+        if (date && date.length === 8) {
+          days[`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`] = name || "공휴일";
+        }
+      }
+    } catch (e) {
+      failed.push(ym);
+    }
+  }
+  const at = kst();
+  return { days, months,
+           failed: failed.length ? failed : undefined,
+           at: `${at.getUTCFullYear()}-${p2(at.getUTCMonth() + 1)}-${p2(at.getUTCDate())} ` +
+               `${p2(at.getUTCHours())}:${p2(at.getUTCMinutes())}` };
 }
 
 /* ───────────────────────── 날씨 ───────────────────────── */
@@ -494,8 +535,12 @@ export default {
         const pinMap = JSON.parse(env.BUS_PIN || "{}");
         const hideMap = JSON.parse(env.BUS_HIDE || "{}");
         res = json(await getBus(env, arsList, pinMap, hideMap), CACHE_BUS);
+      } else if (url.pathname === "/holiday") {
+        const months = Math.min(12, Math.max(1, +(url.searchParams.get("months") || 3)));
+        res = json(await getHoliday(env, months), CACHE_HOLIDAY);
       } else {
-        return json({ error: "없는 주소입니다", 창구: ["/weather", "/bus", "/health"] }, 0);
+        return json({ error: "없는 주소입니다",
+                      창구: ["/weather", "/bus", "/holiday", "/health"] }, 0);
       }
       ctx.waitUntil(cache.put(cacheKey, res.clone()));
       return res;

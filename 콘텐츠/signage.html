@@ -320,12 +320,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .bsrow.boost.dead{color:#8a6000}
 .bsrow.boost.sel{box-shadow:inset 14px 0 0 #FFF}
 
-/* ══ 공지 ══ */
-.nt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:38px;padding:80px;text-align:center;background:#FFF}
-.nt .k{font-size:25px;font-weight:700;letter-spacing:12px;border:8px solid #000;padding:14px 38px}
-.nt h3{font-size:92px;font-weight:900;line-height:1.15;letter-spacing:-4px;word-break:keep-all}
-.nt p{font-size:33px;line-height:1.5;font-weight:700;color:#444}
-.nt .d{font-size:29px;font-weight:700;background:#000;color:#FFF;padding:12px 30px;border-radius:100px}
+/* ══ 달력 ══
+   업무와 무관한 순수 달력입니다. 달·요일·날짜·공휴일만 있습니다.
+   세로선을 두지 않아 주 단위로 끊어 읽히고, 주말·공휴일에 옅은 바탕을 깝니다. */
+.cl{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
+
+/* 표제 — 모눈 위에 흰 판을 얹습니다. 아래 달력 격자와 결이 이어집니다. */
+.clmh{height:150px;flex:0 0 auto;position:relative;overflow:hidden;
+  border-bottom:8px solid #000;background-color:#FFF;
+  background-image:linear-gradient(#BDBDBD 2px,transparent 2px),
+                   linear-gradient(90deg,#BDBDBD 2px,transparent 2px);
+  background-size:24px 24px}
+.clplate{position:absolute;left:26px;top:22px;background:#FFF;border:5px solid #000;
+  padding:6px 22px 10px}
+.clplate b{font-size:76px;font-weight:900;letter-spacing:-4px;line-height:1;display:block}
+.clyr{position:absolute;right:0;bottom:0;background:#000;color:#FFF;padding:9px 22px;
+  font-size:23px;font-weight:900;letter-spacing:2px}
+
+.cldow{height:78px;flex:0 0 auto;display:grid;grid-template-columns:repeat(7,1fr);
+  background:#000;color:#FFF}
+.cldow div{display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900}
+.cldow .we{color:#9a9a9a}
+
+.clgrid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
+.clcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  border-bottom:5px solid #000}
+.clcell .n{font-size:52px;font-weight:900;letter-spacing:-2px}
+/* 공휴일 표시 — 주말과 바탕이 같아서 점으로 가릅니다 */
+.clcell .hd{width:15px;height:15px;background:#000;border-radius:50%}
+.clcell.we{background:#F2F2F2}
+.clcell.we .n{color:#8f8f8f}
+.clcell.we .hd{background:#8f8f8f}
+.clcell.past .n{color:#C4C4C4}      /* 지난 날은 연하게 — 달이 얼마나 지났는지 보입니다 */
+.clcell.past .hd{background:#C4C4C4}
+.clcell.today{background:#000}
+.clcell.today .n{color:#FFF}
+.clcell.today .hd{background:#FFF}
+
+/* 공휴일 이름은 칸에 넣지 않고 아래에 모읍니다 — 칸이 숫자만으로 깔끔해집니다 */
+.clhol{height:118px;flex:0 0 auto;border-top:8px solid #000;display:flex;align-items:center;
+  justify-content:center;gap:36px;padding:0 30px;overflow:hidden}
+.clhol span{font-size:29px;font-weight:900;letter-spacing:-1px;white-space:nowrap}
+.clhol span em{font-style:normal;font-weight:700;color:#777;margin-right:9px}
+.clhol .none{font-size:27px;font-weight:700;color:#999;letter-spacing:-1px}
 
 /* ══ ② 읽기 ══ */
 #read{position:absolute;inset:0;background:#FFF;z-index:20;display:none;flex-direction:column}
@@ -634,16 +671,106 @@ function build() {
 
   const nt = `
     <div class="group" data-g="${PRESS.length + EXTRA - 1}">
-      <div class="top"><div class="press">NOTICE</div><div class="pmeta mono">[ ${UPD_LABEL} ]</div></div>
-      <div class="nt">
-        <div class="k mono">NOTICE</div>
-        <h3>여기에 공지나<br>이미지가 들어갑니다</h3>
-        <p>팀 공지, 분기 목표, 안내 이미지를<br>이 자리에 넣을 수 있습니다.</p>
-        <div class="d mono" id="today">—</div>
-      </div>${foot()}
+      <div class="top"><div class="press">CALENDAR</div>
+        <div class="pmeta mono" id="calmeta">[ — ]</div></div>
+      <div class="cl" id="calbody">${calHTML()}</div>${foot()}
     </div>`;
 
   $("track").innerHTML = news + wxToday + busCard + nt;
+}
+
+/* ══════════════════ 달력 ══════════════════
+   업무와 무관한 순수 달력입니다. 공휴일만 중계소에서 받아옵니다.
+   확인 버튼으로 이번 달 → 다음 달 → 다다음 달을 봅니다. */
+const CAL_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+let HOL = recall("sgHoliday") || {};       // { "2026-08-15": "광복절", … }
+let calOff = 0;                            // 0 이면 이번 달, 1 이면 다음 달
+let calDay = "";                           // 마지막으로 그린 날 — 자정을 넘겼는지 보는 데 씁니다
+
+const ymd2 = (d) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/* 보고 있는 달의 1일 */
+function calBase() {
+  const t = new Date();
+  return new Date(t.getFullYear(), t.getMonth() + calOff, 1);
+}
+
+function calHTML() {
+  const base = calBase(), today = ymd2(new Date());
+  const y = base.getFullYear(), m = base.getMonth();
+  const first = base.getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+
+  const list = [];
+  for (let i = 0; i < first; i++) list.push(null);
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const dow = (first + d - 1) % 7;
+    list.push({ d, key, hol: HOL[key] || "",
+                we: dow === 0 || dow === 6 || !!HOL[key],
+                today: key === today, past: key < today });
+  }
+  while (list.length % 7) list.push(null);
+
+  const cells = list.map((c) => {
+    if (!c) return `<div class="clcell"></div>`;
+    const k = ["clcell", c.we ? "we" : "", c.past ? "past" : "", c.today ? "today" : ""]
+      .filter(Boolean).join(" ");
+    return `<div class="${k}"><div class="n">${c.d}</div>` +
+           (c.hol ? `<div class="hd"></div>` : "") + `</div>`;
+  }).join("");
+
+  // 이 달의 공휴일만 아래에 모읍니다
+  const mine = Object.entries(HOL)
+    .filter(([k]) => k.startsWith(`${y}-${pad(m + 1)}`))
+    .sort(([a], [b]) => a < b ? -1 : 1);
+
+  return `
+    <div class="clmh">
+      <div class="clplate"><b>${m + 1}월</b></div>
+      <div class="clyr mono">${y}</div>
+    </div>
+    <div class="cldow">${CAL_DOW.map((x, i) =>
+      `<div class="${i === 0 || i === 6 ? "we" : ""}">${x}</div>`).join("")}</div>
+    <div class="clgrid">${cells}</div>
+    <div class="clhol">${mine.length
+      ? mine.map(([k, v]) =>
+          `<span><em>${+k.slice(5, 7)}.${+k.slice(8, 10)}</em>${esc(v)}</span>`).join("")
+      : `<div class="none">이 달에는 공휴일이 없습니다</div>`}</div>`;
+}
+
+const CALGI = PRESS.length + EXTRA - 1;
+
+function drawCal() {
+  const body = $("calbody");
+  if (body) body.innerHTML = calHTML();
+  const base = calBase();
+  const meta = $("calmeta");
+  if (meta) {
+    meta.textContent = calOff === 0
+      ? `[ ${base.getFullYear()}. ${base.getMonth() + 1} ]`
+      : `[ ${base.getFullYear()}. ${base.getMonth() + 1} · ${calOff}달 뒤 ]`;
+  }
+  calDay = ymd2(new Date());
+}
+
+/* 확인 버튼 — 이번 달 → 다음 달 → 다다음 달 → 이번 달 */
+function calNext() {
+  calOff = (calOff + 1) % 3;
+  drawCal();
+}
+
+/* 공휴일 받아오기 — 하루에 몇 번이면 충분합니다 */
+async function pullHoliday() {
+  try {
+    const r = await fetch(wurl("/holiday?months=6"), { cache: "no-store" });
+    const j = await r.json();
+    if (j && j.days && Object.keys(j.days).length) {
+      HOL = j.days; keep("sgHoliday", HOL);
+      drawCal();
+    }
+  } catch (e) { /* 못 받아도 달력은 그대로 나옵니다 */ }
 }
 
 /* ══ 시간별 예보 쪽 넘김 ══
@@ -1200,6 +1327,10 @@ function showGroup(i) {
   gi = (i + N) % N;
   ri = 0;
 
+  // 달력을 떠나면 이번 달로 되돌립니다. 다음 달을 보다 나갔는데
+  // 한참 뒤에 돌아와서도 다음 달이 떠 있으면 오늘을 못 찾습니다.
+  if (prev === CALGI && gi !== CALGI && calOff !== 0) { calOff = 0; drawCal(); }
+
   moving = true;                       // 전환 중에는 시계 등 잔일을 멈춥니다
   clearTimeout(moveT);
   moveT = setTimeout(() => { moving = false; tick(true); }, 620);
@@ -1515,6 +1646,7 @@ addEventListener("keydown", e => {
     else if (c === 13 && L.length) openRead();
     else if (c === 13 && gi === PRESS.length) { hourNext(); resetAuto(); }
     else if (c === 13 && BUS.length && gi === BUSGI) { busBoost(); resetAuto(); }
+    else if (c === 13 && gi === CALGI) { calNext(); resetAuto(); }
     else used = false;
   }
   if (used) e.preventDefault();   // 우리가 쓴 키만 기본동작 차단, 나머지는 기기로 통과
@@ -1533,6 +1665,8 @@ function tick(force) {
   tickBusLeft();
   drawBusTick();
   if (gi === BUSGI) drawBusSel();
+  // 자정을 넘기면 '오늘' 과 '지난 날' 이 달라집니다
+  if (calDay && calDay !== ymd2(new Date())) drawCal();
   document.querySelectorAll(".group").forEach(g => {
     if (g.style.visibility === "hidden") return;
     const el = g.querySelector(".clock");
@@ -1586,15 +1720,16 @@ function preloadImages() {
 document.body.setAttribute("tabindex", "0");
 preloadImages();
 document.body.classList.add("booting");        // 첫 배치는 소리 없이
-build(); fit(); rebuildTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
+build(); fit(); drawCal(); rebuildTargets(); drawBusSel(); showGroup(0); tick(); drawNewsTick(); restorePause(); restoreBoost();
 // 자리를 다 잡은 뒤 전환을 켭니다.
 // (화면이 가려져 있으면 requestAnimationFrame 이 멈춰 버려서, 시간으로 겁니다)
 setTimeout(() => document.body.classList.remove("booting"), 80);
 
 /* 중계소에서 날씨·버스를 받아옵니다 (지난 값으로 이미 그려 둔 위에 갈아 끼웁니다) */
 if (_bgot && Date.now() - _bgot < 30 * 60 * 1000) busGotAt = _bgot;
-pullWeather(); pullBus();
+pullWeather(); pullBus(); pullHoliday();
 setInterval(pullWeather, 600000);
+setInterval(pullHoliday, 6 * 3600000);      // 임시공휴일이 생겨도 그날 안에 들어옵니다
 setInterval(tick, 1000);
 // 처음엔 확실히 잡습니다 (이게 안 되면 리모컨이 아예 안 먹습니다).
 // 키가 한 번 들어온 뒤로는 위 조건에 걸려 저절로 조용해집니다.
