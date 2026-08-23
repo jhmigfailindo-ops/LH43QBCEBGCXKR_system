@@ -368,16 +368,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .cldow .we{color:#9a9a9a}
 
 .clgrid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
-.clcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
-  border-bottom:5px solid #000;border-right:5px solid #000}
+.clcell{position:relative;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;border-bottom:5px solid #000;border-right:5px solid #000}
 .clcell:nth-child(7n){border-right:none}
 /* 이 달이 아닌 칸은 세로선을 없앱니다 — 격자가 이 달의 모양대로만 남습니다.
    1일을 여는 한 줄은 남겨야 첫날의 옆구리가 트이지 않습니다. */
 .clcell.off,.clcell.next{border-right:none}
 .clcell.off.keep{border-right:5px solid #000}
 .clcell .n{font-size:52px;font-weight:900;letter-spacing:-2px}
-/* 공휴일 표시 — 주말과 바탕이 같아서 점으로 가릅니다 */
-.clcell .hd{width:15px;height:15px;background:#000;border-radius:50%}
+/* 공휴일 표시 — 주말과 바탕이 같아서 점으로 가릅니다.
+   흐름에 두면 두 가지가 어긋났습니다.
+     ① 칸 안에서 숫자가 11px 올라간다 (점 15px + 간격 7px 의 절반)
+     ② 그 주의 줄이 22px 두꺼워진다 (격자 줄 높이가 내용에 따라 정해지므로)
+   그래서 흐름에서 빼고 숫자 중심에서 일정 거리 아래에 걸어 둡니다.
+   줄 높이가 달마다(5주·6주) 달라져도 숫자와의 간격은 그대로입니다. */
+.clcell .hd{position:absolute;left:50%;top:calc(50% + 40px);transform:translateX(-50%);
+  width:15px;height:15px;background:#000;border-radius:50%}
 .clcell.we{background:#F2F2F2}
 .clcell.we .n{color:#8f8f8f}
 .clcell.we .hd{background:#8f8f8f}
