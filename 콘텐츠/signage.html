@@ -356,8 +356,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
    글꼴(-apple-system)의 기준선이 76px 칸의 66.5px 에 있어서 잉크가 위 4.8px·아래 3.3px 에
    걸리는데, 패딩까지 아래가 두꺼우면 그 차이가 눈에 띕니다.
    7/9 로 두면 위 11.8px · 아래 12.3px 로 맞습니다 (박스 높이 102px 는 그대로). */
+/* 좌우 패딩이 22/22 면 글자가 오른쪽으로 2.4px 쏠려 보입니다.
+   글꼴(-apple-system)의 왼쪽 사이드베어링 때문입니다 — 글자 앞에 2~4px 빈 공간이
+   붙는데 뒤에는 0.1~0.6px 뿐입니다. 열두 달 전부 같은 방향으로 1.4~3.7px 쏠립니다.
+   왼쪽을 2px 줄여 20/22 로 두면 평균 0.4px 로 맞습니다(달마다 ±1px 남음). */
 .clplate{position:absolute;left:26px;top:22px;background:#FFF;border:5px solid #000;
-  padding:7px 22px 9px}
+  padding:7px 22px 9px 20px}
 .clplate b{font-size:76px;font-weight:900;letter-spacing:-4px;line-height:1;display:block}
 .clyr{position:absolute;right:0;bottom:0;background:#000;color:#FFF;padding:9px 22px;
   font-size:23px;font-weight:900;letter-spacing:2px}
