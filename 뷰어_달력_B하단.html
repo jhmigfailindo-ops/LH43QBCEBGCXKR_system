@@ -1,0 +1,173 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>달력 — 합침 B · 넘어온 공휴일 하단 표기</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#141414;color:#eee;padding:22px 16px 70px;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  -webkit-font-smoothing:antialiased}
+h1{font-size:20px;font-weight:800;margin-bottom:4px}
+.sub{font-size:12px;color:#999;margin-bottom:18px;line-height:1.65}
+.detail{background:#0d0d0d;border:1px solid #2e2e2e;padding:16px 18px 18px;margin-bottom:24px}
+.dttl{font-size:13px;font-weight:800;color:#ddd;margin-bottom:12px}
+.dlbl{font-size:10.5px;font-weight:800;color:#8a8a8a;margin:0 0 6px;letter-spacing:1px}
+.dwrap{color:#000;background:#FFF;margin-bottom:14px}   /* 카드와 같은 흰 바탕이어야 색이 맞습니다 */
+.row{display:flex;gap:14px;align-items:flex-start}
+.col{width:398px;flex:0 0 auto}
+.cap{font-size:13.5px;font-weight:800;margin-bottom:3px}
+.dev{font-size:10.5px;font-weight:800;color:#6f6f6f;letter-spacing:1px;margin-bottom:4px}
+.why{font-size:11.5px;color:#9a9a9a;line-height:1.6;margin-bottom:8px;min-height:104px}
+.frame{zoom:.393}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+.card{width:1008px;height:1803px;background:#000;color:#000;
+  display:flex;flex-direction:column;overflow:hidden}
+.top{height:146px;padding:0 34px;border-bottom:22px solid #000;background:#FFF;
+  display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
+.top .press{font-size:60px;font-weight:900;letter-spacing:-2px}
+.top .pmeta{font-size:27px;font-weight:700}
+.cl{flex:1;display:flex;flex-direction:column;background:#FFF;min-height:0}
+.clmh{height:150px;flex:0 0 auto;position:relative;overflow:hidden;
+  border-bottom:8px solid #000;background:#FFF}
+.clplate{position:absolute;left:26px;top:22px;background:#FFF;border:5px solid #000;
+  padding:6px 22px 10px}
+.clplate b{font-size:76px;font-weight:900;letter-spacing:-4px;line-height:1;display:block}
+.clyr{position:absolute;right:0;bottom:0;background:#000;color:#FFF;padding:9px 22px;
+  font-size:23px;font-weight:900;letter-spacing:2px}
+.cldow{height:78px;flex:0 0 auto;display:grid;grid-template-columns:repeat(7,1fr);
+  background:#000;color:#FFF}
+.cldow div{display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900}
+.cldow .we{color:#9a9a9a}
+.clgrid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);min-height:0}
+.clcell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  border-bottom:5px solid #000;border-right:5px solid #000}
+.clcell:nth-child(7n){border-right:none}
+.clcell .n{font-size:52px;font-weight:900;letter-spacing:-2px}
+.clcell .hd{width:15px;height:15px;background:#000;border-radius:50%}
+.clcell.we{background:#F2F2F2}
+.clcell.we .n{color:#8f8f8f}
+.clcell.we .hd{background:#8f8f8f}
+.clcell.past .n{color:#C4C4C4}
+.clcell.past .hd{background:#C4C4C4}
+.clcell.today{background:#000}
+.clcell.today .n{color:#FFF}
+.clcell.today .hd{background:#FFF}
+/* 다음 달로 넘어간 날 — 주말 바탕은 이 달에서 끊습니다 */
+.clcell.next{background:transparent}
+.clcell.next .n{color:#DCDCDC}
+.clcell.next .hd{background:#DCDCDC}
+/* 합침 B — 이 달이 아닌 칸은 앞뒤 모두 세로선 없앰 */
+.clcell.off,.clcell.next{border-right:none}
+.clcell.off.keep{border-right:5px solid #000}
+
+.clhol{height:118px;flex:0 0 auto;border-top:8px solid #000;display:flex;align-items:center;
+  justify-content:center;gap:36px;padding:0 30px;overflow:hidden}
+.clhol span{font-size:29px;font-weight:900;letter-spacing:-1px;white-space:nowrap}
+.clhol span em{font-style:normal;font-weight:700;color:#777;margin-right:9px}
+/* 넘어온 달 공휴일 — 점과 같은 연회색으로 */
+.clhol span.nx{color:#C9C9C9}
+.clhol span.nx em{color:#DCDCDC}
+/* 같은 검정으로 두는 판 */
+.SAME .clhol span.nx{color:#000}
+.SAME .clhol span.nx em{color:#777}
+.foot{height:74px;margin:22px 0 0;background:#000;color:#EDEDED;display:flex;align-items:center;
+  padding:0 24px;font-size:25px;font-weight:900;flex:0 0 auto;letter-spacing:1px}
+</style></head><body>
+<h1>달력 — 합침 B · 넘어온 공휴일을 하단에 적기</h1>
+<div class="sub">합침 B(앞뒤 모두 세로선 없앰 · 뒤쪽에 다음 달 날짜) 기준입니다.<br>
+격자의 <b>점에는 반드시 하단에 이름이 있다</b> 는 규칙을 되살려, 넘어온 달의 공휴일도 하단에 적습니다.<br>
+8월은 9/1~9/5 에 공휴일이 없어 변화가 없습니다 — 그래서 <b>9월</b>로 함께 뽑았습니다.</div>
+
+<div class="detail">
+  <div class="dttl">하단 줄만 실제 크기 (1008 × 118)</div>
+  <div class="dlbl">9월 · 넘어온 10.3 개천절을 연회색으로</div>
+  <div class="dwrap" id="d1"></div>
+  <div class="dlbl">9월 · 같은 검정으로</div>
+  <div class="dwrap SAME" id="d2"></div>
+</div>
+
+<div class="row" id="row"></div>
+<script>
+const HOL = {
+  "2026-08-15":"광복절", "2026-08-17":"대체공휴일(광복절)",
+  "2026-09-24":"추석", "2026-09-25":"추석", "2026-09-26":"추석",
+  "2026-10-03":"개천절", "2026-10-05":"대체공휴일(개천절)", "2026-10-09":"한글날",
+};
+const TODAY = "2026-08-24", DOW = ["일","월","화","수","목","금","토"];
+const pad = n => String(n).padStart(2,"0");
+const md = k => `${+k.slice(5,7)}.${+k.slice(8,10)}`;
+
+function cells(y, m) {
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const out = [];
+  for (let i = 0; i < first; i++) out.push({ off: true, keep: i === first - 1 });
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m+1)}-${pad(d)}`, dow = (first + d - 1) % 7;
+    out.push({ d, key, hol: HOL[key] || "", we: dow===0||dow===6||!!HOL[key],
+               today: key===TODAY, past: key<TODAY });
+  }
+  let nd = 1;
+  while (out.length % 7) {
+    const nm = new Date(y, m + 1, nd);
+    const key = `${nm.getFullYear()}-${pad(nm.getMonth()+1)}-${pad(nm.getDate())}`;
+    out.push({ d: nd, key, hol: HOL[key] || "", next: true });
+    nd++;
+  }
+  return out;
+}
+
+/* 하단 줄 — 격자에 점이 찍힌 날을 그대로 모읍니다.
+   그러면 '점에는 이름이 있다' 는 규칙이 어느 달에서나 지켜집니다. */
+function holBar(list) {
+  const rows = list.filter(c => c && c.hol)
+    .map(c => `<span class="${c.next ? "nx" : ""}"><em>${md(c.key)}</em>${c.hol}</span>`);
+  return `<div class="clhol">${rows.length ? rows.join("")
+    : `<div style="font-size:27px;font-weight:700;color:#999">이 달에는 공휴일이 없습니다</div>`}</div>`;
+}
+
+function card(y, m, cls) {
+  const list = cells(y, m);
+  return `
+    <div class="card ${cls}">
+      <div class="top"><div class="press">CALENDAR</div>
+        <div class="pmeta mono">[ ${y}. ${m+1} ]</div></div>
+      <div class="cl">
+        <div class="clmh"><div class="clplate"><b>${m+1}월</b></div>
+          <div class="clyr mono">${y}</div></div>
+        <div class="cldow">${DOW.map((x,i)=>
+          `<div class="${i===0||i===6?"we":""}">${x}</div>`).join("")}</div>
+        <div class="clgrid">${list.map(c => {
+          if (c.off) return `<div class="clcell off${c.keep?" keep":""}"></div>`;
+          const k = ["clcell", c.we?"we":"", c.past?"past":"",
+                     c.today?"today":"", c.next?"next":""].filter(Boolean).join(" ");
+          return `<div class="${k}"><div class="n">${c.d}</div>${
+            c.hol?`<div class="hd"></div>`:""}</div>`;
+        }).join("")}</div>
+        ${holBar(list)}
+      </div>
+      <div class="foot">속보가 그대로 흐릅니다</div>
+    </div>`;
+}
+
+document.getElementById("d1").innerHTML = holBar(cells(2026, 8));
+document.getElementById("d2").innerHTML = holBar(cells(2026, 8));
+
+const SPECS = [
+  { cap:"9월 — 연회색으로 (권장)", dev:"넘어온 것은 #C9C9C9",
+    why:"넘어온 <b>10.3 개천절</b> 을 격자의 점과 같은 연회색으로 적습니다. 점에 이름이 붙으면서도, 이 달 것과 다음 달 것이 색으로 갈립니다.",
+    html: card(2026, 8, "") },
+  { cap:"9월 — 같은 검정으로", dev:"구분 없이",
+    why:"넘어온 것도 이 달 것과 같은 검정으로 적습니다. 읽기는 쉬운데 <b>9월 목록에 10월 것이 섞인</b> 것처럼 보여, 이 줄이 무엇을 담는 줄인지 흐려집니다.",
+    html: card(2026, 8, "SAME") },
+  { cap:"8월 — 넘어온 공휴일 없는 달", dev:"변화 없음",
+    why:"9/1~9/5 에 공휴일이 없어 하단은 이 달 것 둘만 그대로입니다. 대부분의 달이 이 모습이고, 넘어온 이름이 붙는 달은 드뭅니다.",
+    html: card(2026, 7, "") },
+];
+document.getElementById("row").innerHTML = SPECS.map(s => `
+  <div class="col">
+    <div class="cap">${s.cap}</div>
+    <div class="dev mono">${s.dev}</div>
+    <div class="why">${s.why}</div>
+    <div class="frame">${s.html}</div>
+  </div>`).join("");
+</script></body></html>
