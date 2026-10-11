@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>리모컨 입력 테스트</title>
+<!--
+  리모컨 키가 웹페이지까지 전달되는지 확인하는 테스트 페이지.
+  아무 버튼이나 누르면 화면에 크게 표시됩니다.
+
+  삼성 사이니지 공식 문서상 방향키·Enter·Back 은 별도 등록 없이
+  표준 keydown 이벤트로 전달된다고 되어 있습니다. 실제로 그런지 확인용.
+-->
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  background:#0f141a;color:#eef2f6;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  display:flex;flex-direction:column;padding:4vh 5vw;-webkit-font-smoothing:antialiased;
+}
+h1{font-size:3.2vh;font-weight:800;padding-bottom:1.6vh;border-bottom:.35vh solid #5b8dff;flex-shrink:0}
+h1 small{display:block;font-size:1.9vh;font-weight:400;color:#7f8b99;margin-top:.6vh}
+
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5vh;min-height:0}
+.wait{font-size:3.4vh;color:#4a5866;text-align:center;line-height:1.5}
+.wait b{display:block;font-size:5vh;color:#7f8b99;margin-bottom:2vh}
+
+.hit{display:none;flex-direction:column;align-items:center;gap:1vh}
+.hit.on{display:flex}
+.key{
+  font-size:12vh;font-weight:800;color:#4ecf9b;line-height:1;letter-spacing:-.03em;
+  text-align:center;word-break:break-all;
+}
+.code{font-size:3.4vh;color:#5b8dff;font-weight:700;font-variant-numeric:tabular-nums}
+.count{
+  font-size:2.2vh;color:#7f8b99;background:#1a222c;border-radius:1vh;padding:1vh 3vw;margin-top:1.5vh;
+}
+.count b{color:#4ecf9b;font-size:3vh}
+
+.log{
+  flex-shrink:0;background:#161d26;border-radius:1.2vh;padding:1.6vh 3vw;
+  font-size:2vh;line-height:1.7;color:#9aa7b4;max-height:24vh;overflow:hidden;
+}
+.log .t{font-size:1.7vh;color:#5b6672;margin-bottom:.8vh;font-weight:700;letter-spacing:.05em}
+.log ol{list-style:none;font-variant-numeric:tabular-nums}
+.log li{padding:.3vh 0;border-bottom:1px solid #1e262f;display:flex;gap:2vw}
+.log li:last-child{border:none}
+.log .k{color:#4ecf9b;font-weight:700;min-width:26vw}
+.log .c{color:#5b8dff}
+
+footer{flex-shrink:0;font-size:1.8vh;color:#5b6672;text-align:center;padding-top:1.5vh}
+</style>
+</head>
+<body>
+  <h1>리모컨 입력 테스트
+    <small>사이니지 리모컨의 아무 버튼이나 눌러보세요</small>
+  </h1>
+
+  <div class="stage">
+    <div class="wait" id="wait">
+      <b>⬅ ⬆ ➡ ⬇</b>
+      방향키 · 확인(Enter) · 숫자 버튼을<br>눌러보세요
+    </div>
+
+    <div class="hit" id="hit">
+      <div class="key" id="key">—</div>
+      <div class="code" id="code">keyCode —</div>
+    </div>
+
+    <div class="count">누른 횟수 <b id="cnt">0</b></div>
+  </div>
+
+  <div class="log">
+    <div class="t">최근 입력</div>
+    <ol id="log"><li style="color:#4a5866">아직 입력 없음</li></ol>
+  </div>
+
+  <footer id="foot">키가 하나도 안 잡히면 → 리모컨 입력이 웹페이지까지 오지 않는 것</footer>
+
+<script>
+let n = 0;
+const hist = [];
+
+/* 리모컨 키 이름을 사람이 읽기 좋게 */
+const NAMES = {
+  37: "◀ 왼쪽", 38: "▲ 위", 39: "▶ 오른쪽", 40: "▼ 아래",
+  13: "확인 (Enter)", 10009: "뒤로 (Back)", 27: "ESC",
+  415: "재생", 19: "일시정지", 413: "정지",
+  412: "되감기", 417: "빨리감기",
+  427: "채널 ▲", 428: "채널 ▼",
+  447: "음량 ▲", 448: "음량 ▼", 449: "음소거",
+  // 숫자키 — 사이니지에서 잡히는지 확인용
+  48: "숫자 0 ⭐", 49: "숫자 1", 50: "숫자 2", 51: "숫자 3", 52: "숫자 4",
+  53: "숫자 5", 54: "숫자 6", 55: "숫자 7", 56: "숫자 8", 57: "숫자 9",
+  96: "텐키 0 ⭐",
+};
+
+/* 컬러버튼은 keyCode 대신 key 이름으로 들어옵니다 (실기기 확인) */
+const KEYNAMES = {
+  XF86Red: "🔴 빨강", XF86Green: "🟢 초록",
+  XF86Yellow: "🟡 노랑", XF86Blue: "🔵 파랑 (새로고침)",
+};
+
+function onKey(e) {
+  n++;
+  const code = e.keyCode || e.which || 0;
+  const name = KEYNAMES[e.key] || NAMES[code]
+    || (e.key && e.key !== "Unidentified" ? e.key : `키 ${code}`);
+
+  document.getElementById("wait").style.display = "none";
+  document.getElementById("hit").classList.add("on");
+  document.getElementById("key").textContent = name;
+  document.getElementById("code").textContent = `keyCode ${code}`;
+  document.getElementById("cnt").textContent = n;
+  document.getElementById("foot").textContent = "✅ 리모컨 입력이 웹페이지까지 전달됩니다";
+  document.getElementById("foot").style.color = "#4ecf9b";
+
+  hist.unshift({ name, code });
+  document.getElementById("log").innerHTML = hist.slice(0, 6)
+    .map(h => `<li><span class="k">${h.name}</span><span class="c">${h.code}</span></li>`).join("");
+
+  e.preventDefault();
+}
+
+/* 캡처 단계에서 잡아, 다른 스크립트가 가로채기 전에 받습니다 */
+document.addEventListener("keydown", onKey, true);
+document.body.setAttribute("tabindex", "0");
+
+/* iframe 안에서 포커스를 못 받으면 키가 안 오므로 강제로 잡아둡니다 */
+function grab() {
+  try { window.focus(); document.body.focus(); } catch (e) {}
+}
+grab();
+setInterval(grab, 3000);
+document.addEventListener("click", grab);
+</script>
+</body>
+</html>
