@@ -30,6 +30,8 @@ __pycache__/
 설정.json.백업_*
 콘텐츠/signage-a.html
 콘텐츠/signage.html.bak*
+# 시안 뷰어 — 콘텐츠/ 는 통째로 gh-pages 에 공개되므로 시안은 세션 폴더에 둡니다
+콘텐츠/뷰어_*.html
 
 # 옛 프로토타입 (지금은 signage.html 하나로 통합)
 player.py
