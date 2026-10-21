@@ -37,21 +37,35 @@ jobs:
       - name: 사진 처리에 쓰는 것 설치
         run: pip install --quiet pillow
 
-      - name: 지난번 사진 가져오기
-        # 사진은 파일 이름이 기사 주소의 지문이라, 이미 받아 둔 것은 다시 받지 않습니다.
-        # gh-pages 는 콘텐츠 폴더의 '속'을 올린 갈래라 img/ 가 맨 위에 있습니다.
+      - name: 지난번 사진·데이터 가져오기
+        # gh-pages 는 콘텐츠 폴더의 '속'을 올린 갈래라 img/ · 데이터.js 가 맨 위에 있습니다.
         # (예전에는 콘텐츠/ 를 찾아서 아무것도 못 가져왔습니다)
-        # 사진만 가져옵니다 — 통째로 가져오면 옛 signage.html 이 새것을 덮어씁니다.
-        # 어느 경우든 이 단계는 실패로 끝나지 않습니다. 못 가져오면 사진을 모두 새로 받을 뿐입니다.
+        # 이 둘만 가져옵니다 — 통째로 가져오면 옛 signage.html 이 새것을 덮어씁니다.
+        # 둘은 따로 풉니다. 한 번에 묶으면 하나만 없어도 둘 다 못 가져옵니다.
+        # 어느 경우든 이 단계는 실패로 끝나지 않습니다.
         run: |
           if ! git fetch origin gh-pages --depth=1 2>/dev/null; then
-            echo "gh-pages 를 받지 못했습니다(첫 실행이거나 접속 실패) — 사진을 모두 새로 받습니다"
-          elif ! git cat-file -e FETCH_HEAD:img 2>/dev/null; then
+            echo "gh-pages 를 받지 못했습니다(첫 실행이거나 접속 실패) — 모두 새로 만듭니다"
+            exit 0
+          fi
+
+          # 사진은 파일 이름이 기사 주소의 지문이라, 이미 받아 둔 것은 다시 받지 않습니다.
+          if ! git cat-file -e FETCH_HEAD:img 2>/dev/null; then
             echo "지난 배포에 사진이 없습니다"
           elif git archive FETCH_HEAD img | tar -x -C 콘텐츠; then
             echo "지난 사진 $(ls 콘텐츠/img | wc -l)장을 가져왔습니다"
           else
             echo "사진을 풀지 못했습니다 — 모두 새로 받습니다"
+          fi
+
+          # 기사가 한 건도 안 모인 회차엔 수집기가 데이터.js 를 쓰지 않습니다.
+          # 지난 것을 깔아 두면 그때도 뉴스 카드가 사라지지 않고, 우상단 UPDATED 가 지난 시각을 보여 줍니다.
+          # 수집이 되면 수집기가 새로 덮어씁니다.
+          if git show FETCH_HEAD:데이터.js > 콘텐츠/데이터.js 2>/dev/null; then
+            echo "지난 데이터.js 를 깔아 두었습니다 ($(grep -o '"updatedAt": "[^"]*"' 콘텐츠/데이터.js))"
+          else
+            rm -f 콘텐츠/데이터.js
+            echo "지난 배포에 데이터.js 가 없습니다"
           fi
 
       - name: 수집 (뉴스만)
