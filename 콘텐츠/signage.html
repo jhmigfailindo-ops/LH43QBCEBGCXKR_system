@@ -55,6 +55,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 /* 한글·영문 혼용 시 글자가 위로 붙어 보여 시각 중심을 조금 내렸습니다 */
 .press{font-size:84px;font-weight:900;letter-spacing:-4px;line-height:1;transform:translateY(5px)}
 .pmeta{font-size:26px;font-weight:700;letter-spacing:-1px;align-self:flex-end;margin-bottom:24px}
+/* 뉴스 카드의 수집 시각 — UPDATED 10.21 21:40
+   라벨과 값은 굵기가 아니라 크기로 가릅니다. 실기기의 대체 고정폭 글꼴은 굵기가 두 개뿐이라
+   700·900 차이는 같아 보일 수 있습니다. 숫자 폭을 고정해 시각이 바뀌어도 글자가 흔들리지 않게 합니다. */
+.pmeta .lb{font-size:20px;font-weight:400;letter-spacing:2px;margin-right:12px}
+.pmeta .v{font-variant-numeric:tabular-nums}
 
 /* ── 아코디언 ──────────────────────────────────────────────
    구조
@@ -598,7 +603,8 @@ let WX = recall("sgWeather") || D.weather || { location: "받는 중", temp: "�
 const UPD_LABEL = (() => {
   const s = D.updatedAt || "";                       // "2026-08-15 23:17:24"
   const m = s.match(/^\d{4}-(\d{2})-(\d{2}) (\d{2}:\d{2})/);
-  return m ? `${+m[1]}월 ${+m[2]}일 ${m[3]}` : "수집 전";
+  // 10.21 처럼 0 을 채운 두 자리로 둡니다 — 한글이 빠져 한 줄이 고정폭 글꼴 하나로 찍히고, 날씨의 10.21 과도 맞습니다
+  return m ? `${m[1]}.${m[2]} ${m[3]}` : "--.-- --:--";
 })();
 
 /* 평소 하단바에 흐르는 속보·최신 기사.
@@ -1304,7 +1310,7 @@ function renderNear() {
     if (near && g.dataset.empty === "1") {
       g.innerHTML = `
         <div class="top"><div class="press">${esc(p.name)}</div>
-          <div class="pmeta mono">[ ${UPD_LABEL} ]</div></div>
+          <div class="pmeta mono"><span class="lb">UPDATED</span><span class="v">${UPD_LABEL}</span></div></div>
         <div class="stream">
           ${p.items.map((n, k) => `
             <div class="row${k === 0 ? " on sel" : ""}" data-r="${k}">
