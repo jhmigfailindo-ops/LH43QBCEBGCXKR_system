@@ -61,7 +61,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sa
 .pmeta{font-size:26px;font-weight:700;letter-spacing:-1px;align-self:flex-end;margin:0 0 25px 28px}
 /* WEATHER 는 이름이 길어 관측 시각을 줄이고, 버스 안내는 길어서 두 줄로 접습니다(단어 단위) */
 .pmeta.pm-wx{font-size:21px}
-.pmeta.pm-bus{font-size:21px;max-width:400px;line-height:1.3;margin-bottom:22px;word-break:keep-all}
+.pmeta.pm-bus{font-size:21px;max-width:400px;line-height:1.3;margin-bottom:24px;word-break:keep-all}
+/* 이름 → 메타 잉크 간격을 30px 로 맞춥니다. '[' 로 시작하면 글자 왼쪽 여백만큼 벌어지고(33~34px),
+   '▲' 로 시작하면 좁아져서(28px) 메타마다 조금씩 당기거나 밉니다(픽셀 측정) */
+.pmeta.pm-wx{margin-left:25px}
+#calmeta{margin-left:24px}
+.pmeta.pm-bus{margin-left:30px}
+/* 두 줄을 뜻대로 나눕니다 — 1줄 고르기·확인, 2줄 갱신·받은 시각.
+   한 줄 문구를 저절로 접게 두면 '[ 방금 ]' 앞 공백이 둘째 줄 맨 앞에 남아 16px 밀려 보였고,
+   집중조회 중('확인 정지 (15분)')에는 세 줄로 늘어 위로 밀려 올라갔습니다 */
+.pmeta.pm-bus .ln{display:block}
 
 /* 시계 — 하단바의 .clock 을 머리글 흰 영역 오른쪽으로 올려 둡니다(.group 기준 절대 위치).
    카드 이름과 같은 84px · 같은 기준선. 시·분만(초 없음, 깜빡임 없음).
@@ -752,8 +761,8 @@ function build() {
   const busCard = `
     <div class="group" data-g="${PRESS.length + 1}">
       <div class="top"><div class="press">BUS</div>
-        <div class="pmeta pm-bus mono">▲▼ <b id="bustg">—</b> · <span id="bushint">확인 집중조회</span>
-          · 노랑 1회갱신 &nbsp;[ <span id="busat">받는 중</span> ]</div></div>
+        <div class="pmeta pm-bus mono"><span class="ln">▲▼ <b id="bustg">—</b> · <span id="bushint">확인 집중조회</span></span>
+          <span class="ln">노랑 1회갱신 · [ <span id="busat">받는 중</span> ]</span></div></div>
       <div class="bs" id="bsbody">${busHTML()}</div>${foot()}
     </div>`;
 
